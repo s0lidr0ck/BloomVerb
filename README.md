@@ -40,6 +40,14 @@ cmake -S . -B build -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bi
 cmake --build build -j4
 ```
 
+Run tests (when `Tests/BloomVerbEngineTests.cpp` and `Tests/BloomVerbStateTests.cpp` are present):
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+cmake --build build -j4
+ctest --test-dir build --output-on-failure
+```
+
 Artifacts:
 
 - Standalone: `build/BloomVerb_artefacts/Standalone/BloomVerb`

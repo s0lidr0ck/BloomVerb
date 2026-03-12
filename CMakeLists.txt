@@ -7,11 +7,12 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
 include(FetchContent)
+include(CTest)
 
 FetchContent_Declare(
     juce
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG master
+    GIT_TAG 29396c22c93392d6738e021b83196283d6e4d850 # JUCE 8.0.12
     GIT_SHALLOW TRUE
 )
 
@@ -89,3 +90,52 @@ target_link_libraries(BloomVerbLoopTester
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+if(BUILD_TESTING)
+    set(BLOOMVERB_TEST_COMMON_SOURCES
+        Source/DSP/BloomVerbEngine.cpp
+        Source/Parameters/BloomVerbParameters.cpp
+    )
+
+    function(bloomverb_add_test test_name test_source)
+        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test_source}")
+            add_executable(${test_name}
+                ${test_source}
+                ${BLOOMVERB_TEST_COMMON_SOURCES}
+            )
+
+            target_include_directories(${test_name}
+                PRIVATE
+                    ${CMAKE_CURRENT_SOURCE_DIR}
+                    ${CMAKE_CURRENT_SOURCE_DIR}/Source
+            )
+
+            target_compile_definitions(${test_name}
+                PRIVATE
+                    JUCE_WEB_BROWSER=0
+                    JUCE_USE_CURL=0
+                    JUCE_VST3_CAN_REPLACE_VST2=0
+            )
+
+            target_link_libraries(${test_name}
+                PRIVATE
+                    juce::juce_audio_basics
+                    juce::juce_audio_processors
+                    juce::juce_dsp
+                    juce::juce_events
+                    juce::juce_data_structures
+                    juce::juce_core
+                PUBLIC
+                    juce::juce_recommended_config_flags
+                    juce::juce_recommended_warning_flags
+            )
+
+            add_test(NAME ${test_name} COMMAND ${test_name})
+        else()
+            message(STATUS "Skipping ${test_name}: missing ${test_source}")
+        endif()
+    endfunction()
+
+    bloomverb_add_test(BloomVerbEngineTests Tests/BloomVerbEngineTests.cpp)
+    bloomverb_add_test(BloomVerbStateTests Tests/BloomVerbStateTests.cpp)
+endif()
