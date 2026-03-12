@@ -37,3 +37,31 @@ Artifacts:
 
 - Standalone: `build/BloomVerb_artefacts/Standalone/BloomVerb`
 - VST3: `build/BloomVerb_artefacts/VST3/BloomVerb.vst3`
+
+## Loop test environment (no DAW required)
+
+A dedicated test app is included so you can audition BloomVerb with a looping file:
+
+- target: `BloomVerbLoopTester`
+- source: `Source/Tester/LoopTesterMain.cpp`
+
+Build and run:
+
+```bash
+cmake -S . -B build -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+cmake --build build -j4 --target BloomVerbLoopTester
+./build/BloomVerbLoopTester_artefacts/BloomVerb\ Loop\ Tester
+```
+
+Optional: pass an audio file path at launch to auto-load it:
+
+```bash
+./build/BloomVerbLoopTester_artefacts/BloomVerb\ Loop\ Tester "/path/to/loop.wav"
+```
+
+Inside the tester app:
+
+- **Load Audio File** to choose a source
+- **Loop** keeps playback cycling
+- **Play/Stop** controls transport
+- quick controls (Type, Mix, Decay, Size, Motion, Harmonic, Warp) let you audition behavior rapidly

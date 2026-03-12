@@ -60,3 +60,32 @@ target_link_libraries(BloomVerb
         juce::juce_recommended_lto_flags
         juce::juce_recommended_warning_flags
 )
+
+juce_add_gui_app(BloomVerbLoopTester
+    PRODUCT_NAME "BloomVerb Loop Tester"
+    COMPANY_NAME "BloomVerb"
+    BUNDLE_ID com.bloomverb.looptester
+)
+
+target_sources(BloomVerbLoopTester
+    PRIVATE
+        Source/Tester/LoopTesterMain.cpp
+        Source/DSP/BloomVerbEngine.cpp
+        Source/DSP/BloomVerbEngine.h
+)
+
+target_compile_definitions(BloomVerbLoopTester
+    PRIVATE
+        JUCE_WEB_BROWSER=0
+        JUCE_USE_CURL=0
+)
+
+target_link_libraries(BloomVerbLoopTester
+    PRIVATE
+        juce::juce_audio_utils
+        juce::juce_dsp
+    PUBLIC
+        juce::juce_recommended_config_flags
+        juce::juce_recommended_lto_flags
+        juce::juce_recommended_warning_flags
+)
