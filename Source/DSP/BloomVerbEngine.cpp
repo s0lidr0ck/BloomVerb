@@ -355,7 +355,7 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
         const float mix = juce::jlimit(0.0f, 1.0f, smoothed.mix);
         const float dryMix = std::sqrt(juce::jlimit(0.0f, 1.0f, 1.0f - mix));
         const float wetMix = std::sqrt(juce::jlimit(0.0f, 1.0f, mix + freezeState.blend * 0.05f));
-        const float highMixWetLift = juce::jmap(juce::jlimit(0.0f, 1.0f, (mix - 0.65f) / 0.35f), 1.0f, 1.45f);
+        const float highMixWetLift = juce::jmap(juce::jlimit(0.0f, 1.0f, (mix - 0.90f) / 0.10f), 1.0f, 1.60f);
         const float outputGain = juce::Decibels::decibelsToGain(smoothed.outputDb);
 
         const float outL = (inL * dryMix + wetL * wetMix * wetGain * highMixWetLift) * outputGain;
