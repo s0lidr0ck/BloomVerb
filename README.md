@@ -12,6 +12,7 @@ This repository now contains a JUCE-based BloomVerb plugin implementation with:
 - full APVTS target parameter set (essential + signature + advanced)
 - staged DSP engine (detectors, pre-delay, early reflections, diffusion stage, reverb tank, harmonic shaping, warp/dynamic behavior, width growth, tone filtering, wet/dry/output)
 - multi-page UI (Main / Character / Advanced) with live parameter attachments
+- preset browser controls (Prev/Next + selector) backed by factory preset banks
 - VST3 + Standalone build targets via CMake
 
 ## Build (Linux)
@@ -40,10 +41,35 @@ cmake -S . -B build -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bi
 cmake --build build -j4
 ```
 
+Run tests (when `Tests/BloomVerbEngineTests.cpp` and `Tests/BloomVerbStateTests.cpp` are present):
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+cmake --build build -j4
+ctest --test-dir build --output-on-failure
+```
+
 Artifacts:
 
 - Standalone: `build/BloomVerb_artefacts/Standalone/BloomVerb`
 - VST3: `build/BloomVerb_artefacts/VST3/BloomVerb.vst3`
+
+## Fast headless regression tests (ctest)
+
+The repository includes quick non-GUI regression checks that run without an audio device:
+
+- `BloomVerbEngineTests`: DSP smoke test (finite output/no crash under stressed parameter sets)
+- `BloomVerbEngineInvarianceTests`: sample-rate/block-size invariance sanity checks
+- `BloomVerbStateTests`: parameter/state contract test (parameter IDs/defaults + APVTS round-trip)
+- `BloomVerbPresetRecallTests`: preset apply + state restore regression checks
+
+Configure, build tests, and run:
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target BloomVerbEngineTests BloomVerbStateTests -j4
+ctest --test-dir build --output-on-failure
+```
 
 ## Loop test environment (no DAW required)
 

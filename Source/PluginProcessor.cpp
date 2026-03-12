@@ -6,7 +6,8 @@
 BloomVerbAudioProcessor::BloomVerbAudioProcessor()
     : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
-      apvts(*this, nullptr, "BloomVerbState", bloomverb::params::createParameterLayout())
+      apvts(*this, nullptr, "BloomVerbState", bloomverb::params::createParameterLayout()),
+      presetNames(bloomverb::presets::getFactoryPresetNames())
 {
 }
 
@@ -47,6 +48,73 @@ void BloomVerbAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juc
 double BloomVerbAudioProcessor::getTailLengthSeconds() const
 {
     return bloomverb::params::getValue(apvts, bloomverb::params::IDs::decaySeconds);
+}
+
+const juce::StringArray& BloomVerbAudioProcessor::getPresetNames() const noexcept
+{
+    return presetNames;
+}
+
+int BloomVerbAudioProcessor::getCurrentPresetIndex() const noexcept
+{
+    const auto presetCount = presetNames.size();
+    if (presetCount <= 0)
+        return -1;
+
+    return juce::jlimit(0, presetCount - 1, currentPresetIndex.load());
+}
+
+void BloomVerbAudioProcessor::applyPresetByIndex(int presetIndex)
+{
+    const auto& presets = bloomverb::presets::getFactoryPresets();
+    const auto presetCount = static_cast<int>(presets.size());
+    if (presetCount <= 0 || presetIndex < 0 || presetIndex >= presetCount)
+        return;
+
+    const auto applyNow = [this, presetIndex, &presets]
+    {
+        applyPresetInternal(presets[static_cast<size_t>(presetIndex)]);
+        currentPresetIndex.store(presetIndex);
+    };
+
+    if (juce::MessageManager::existsAndIsCurrentThread())
+    {
+        applyNow();
+        return;
+    }
+
+    if (auto* messageManager = juce::MessageManager::getInstanceWithoutCreating(); messageManager != nullptr)
+    {
+        messageManager->callAsync([this, presetIndex]
+        {
+            applyPresetByIndex(presetIndex);
+        });
+        return;
+    }
+
+    applyNow();
+}
+
+void BloomVerbAudioProcessor::applyNextPreset()
+{
+    const auto presetCount = presetNames.size();
+    if (presetCount <= 0)
+        return;
+
+    const auto current = getCurrentPresetIndex();
+    const auto nextIndex = (current + 1) % presetCount;
+    applyPresetByIndex(nextIndex);
+}
+
+void BloomVerbAudioProcessor::applyPreviousPreset()
+{
+    const auto presetCount = presetNames.size();
+    if (presetCount <= 0)
+        return;
+
+    const auto current = getCurrentPresetIndex();
+    const auto previousIndex = (current + presetCount - 1) % presetCount;
+    applyPresetByIndex(previousIndex);
 }
 
 void BloomVerbAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
@@ -97,6 +165,22 @@ bloomverb::RuntimeParameters BloomVerbAudioProcessor::readRuntimeParameters() co
     p.transientPreserve = getValue(apvts, IDs::transientPreserve);
 
     return p;
+}
+
+void BloomVerbAudioProcessor::applyPresetInternal(const bloomverb::presets::BloomVerbPreset& preset)
+{
+    const auto setParameterValue = [this](const std::string& paramID, float value)
+    {
+        if (auto* parameter = apvts.getParameter(juce::StringRef(paramID.c_str())); parameter != nullptr)
+        {
+            parameter->beginChangeGesture();
+            parameter->setValueNotifyingHost(parameter->convertTo0to1(value));
+            parameter->endChangeGesture();
+        }
+    };
+
+    for (const auto& [parameterId, value] : preset.parameterValuesById)
+        setParameterValue(parameterId, value);
 }
 
 juce::AudioProcessorEditor* BloomVerbAudioProcessor::createEditor()

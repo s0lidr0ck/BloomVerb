@@ -219,6 +219,8 @@ BloomVerbAudioProcessorEditor::BloomVerbAudioProcessorEditor(BloomVerbAudioProce
     subtitleLabel.setColour(juce::Label::textColourId, juce::Colour(0xffc8b596));
     addAndMakeVisible(subtitleLabel);
 
+    setupPresetControls();
+
     typeLabel.setText("Type", juce::dontSendNotification);
     typeLabel.setJustificationType(juce::Justification::centredLeft);
     typeLabel.setColour(juce::Label::textColourId, juce::Colour(0xffe5d7c1));
@@ -235,6 +237,64 @@ BloomVerbAudioProcessorEditor::BloomVerbAudioProcessorEditor(BloomVerbAudioProce
 
     setupPageControls();
     setActivePage(0);
+}
+
+void BloomVerbAudioProcessorEditor::setupPresetControls()
+{
+    presetLabel.setText("Preset", juce::dontSendNotification);
+    presetLabel.setJustificationType(juce::Justification::centredLeft);
+    presetLabel.setColour(juce::Label::textColourId, juce::Colour(0xffe5d7c1));
+    addAndMakeVisible(presetLabel);
+
+    presetPrevButton.setButtonText("<");
+    presetPrevButton.onClick = [this]
+    {
+        processor.applyPreviousPreset();
+        refreshPresetSelection();
+    };
+    addAndMakeVisible(presetPrevButton);
+
+    presetNextButton.setButtonText(">");
+    presetNextButton.onClick = [this]
+    {
+        processor.applyNextPreset();
+        refreshPresetSelection();
+    };
+    addAndMakeVisible(presetNextButton);
+
+    presetBox.addItemList(processor.getPresetNames(), 1);
+    presetBox.onChange = [this]
+    {
+        if (suppressPresetBoxChange)
+            return;
+
+        if (const auto presetIndex = presetBox.getSelectedItemIndex(); presetIndex >= 0)
+        {
+            processor.applyPresetByIndex(presetIndex);
+            refreshPresetSelection();
+        }
+    };
+    addAndMakeVisible(presetBox);
+
+    refreshPresetSelection();
+}
+
+void BloomVerbAudioProcessorEditor::refreshPresetSelection()
+{
+    const auto presetCount = processor.getPresetNames().size();
+    const bool hasPresets = presetCount > 0;
+    const auto presetIndex = processor.getCurrentPresetIndex();
+
+    presetBox.setEnabled(hasPresets);
+    presetPrevButton.setEnabled(hasPresets);
+    presetNextButton.setEnabled(hasPresets);
+
+    suppressPresetBoxChange = true;
+    if (hasPresets && presetIndex >= 0)
+        presetBox.setSelectedItemIndex(presetIndex, juce::dontSendNotification);
+    else
+        presetBox.setSelectedId(0, juce::dontSendNotification);
+    suppressPresetBoxChange = false;
 }
 
 void BloomVerbAudioProcessorEditor::setupPageControls()
@@ -331,11 +391,17 @@ void BloomVerbAudioProcessorEditor::paint(juce::Graphics& g)
 void BloomVerbAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced(18);
-    auto header = area.removeFromTop(112);
+    auto header = area.removeFromTop(132);
 
-    auto titleArea = header.removeFromLeft(620);
+    auto titleArea = header.removeFromLeft(700);
     titleLabel.setBounds(titleArea.removeFromTop(44));
-    subtitleLabel.setBounds(titleArea.removeFromTop(26));
+    subtitleLabel.setBounds(titleArea.removeFromTop(24));
+
+    auto presetRow = titleArea.removeFromTop(32);
+    presetLabel.setBounds(presetRow.removeFromLeft(56));
+    presetPrevButton.setBounds(presetRow.removeFromLeft(34));
+    presetBox.setBounds(presetRow.removeFromLeft(210).reduced(4, 0));
+    presetNextButton.setBounds(presetRow.removeFromLeft(34));
 
     auto controls = header.reduced(8, 8);
     auto typeArea = controls.removeFromTop(50);

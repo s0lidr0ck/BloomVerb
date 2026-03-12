@@ -50,19 +50,8 @@ public:
     void process(juce::AudioBuffer<float>& buffer, const RuntimeParameters& parameters);
 
 private:
-    struct TypeProfile
-    {
-        float roomScale = 1.0f;
-        float dampingBias = 0.0f;
-        float preDelayScale = 1.0f;
-        float earlyScale = 1.0f;
-        float widthGrowth = 1.0f;
-        float motionScale = 1.0f;
-        float textureBias = 0.0f;
-    };
-
-    static TypeProfile getTypeProfile(int type);
     static float saturate(float x, float amount);
+    static float mapDecaySecondsToTailControl(float decaySeconds);
 
     double sampleRateHz = 44100.0;
     int maxSamplesPerBlock = 512;
@@ -76,14 +65,21 @@ private:
 
     std::array<float, 2> diffPrevIn { 0.0f, 0.0f };
     std::array<float, 2> diffPrevOut { 0.0f, 0.0f };
+    std::array<float, 2> harmonicRecircState { 0.0f, 0.0f };
+    std::array<float, 2> warpTailState { 0.0f, 0.0f };
 
     std::array<juce::dsp::StateVariableTPTFilter<float>, 2> lowCutFilters;
     std::array<juce::dsp::StateVariableTPTFilter<float>, 2> highCutFilters;
     juce::dsp::Reverb reverb;
+    juce::AudioBuffer<float> dryScratchBuffer;
+    juce::AudioBuffer<float> wetScratchBuffer;
 
     float fastEnvelope = 0.0f;
     float slowEnvelope = 0.0f;
     float releaseState = 0.0f;
     float lfoPhase = 0.0f;
+    float motionState = 0.0f;
+    float warpContourState = 0.5f;
+    float decayTailControl = 0.63f;
 };
 } // namespace bloomverb
