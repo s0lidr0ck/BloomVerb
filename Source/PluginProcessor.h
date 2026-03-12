@@ -1,5 +1,7 @@
 #pragma once
 
+#include <juce_audio_formats/juce_audio_formats.h>
+#include <juce_audio_utils/juce_audio_utils.h>
 #include <juce_audio_processors/juce_audio_processors.h>
 
 #include "DSP/BloomVerbEngine.h"
@@ -12,7 +14,7 @@ class BloomVerbAudioProcessor final : public juce::AudioProcessor
 {
 public:
     BloomVerbAudioProcessor();
-    ~BloomVerbAudioProcessor() override = default;
+    ~BloomVerbAudioProcessor() override;
 
     using AudioProcessor::processBlock;
 
@@ -51,10 +53,25 @@ public:
     float getOutputMeterLevel() const noexcept { return outputMeterLevel.load(); }
     float getFreezeVisualAmount() const noexcept { return freezeVisualAmount.load(); }
 
+#if JucePlugin_Build_Standalone
+    bool loadStandalonePlaybackFile(const juce::File& file);
+    void setStandalonePlaybackActive(bool shouldPlay);
+    bool isStandalonePlaybackActive() const noexcept;
+    bool hasStandalonePlaybackFile() const noexcept;
+    void setStandalonePlaybackLooping(bool shouldLoop);
+    bool isStandalonePlaybackLooping() const noexcept;
+    juce::String getStandalonePlaybackFileLabel() const;
+    juce::String getStandalonePlaybackStatusText() const;
+#endif
+
 private:
     bloomverb::RuntimeParameters readRuntimeParameters() const;
     void applyPresetInternal(const bloomverb::presets::BloomVerbPreset& preset);
     void updateMeterValue(std::atomic<float>& meter, float target) const;
+
+#if JucePlugin_Build_Standalone
+    void releaseStandalonePlaybackResources();
+#endif
 
     juce::AudioProcessorValueTreeState apvts;
     bloomverb::BloomVerbEngine engine;
@@ -63,6 +80,17 @@ private:
     std::atomic<float> inputMeterLevel { 0.0f };
     std::atomic<float> outputMeterLevel { 0.0f };
     std::atomic<float> freezeVisualAmount { 0.0f };
+
+#if JucePlugin_Build_Standalone
+    juce::AudioFormatManager standaloneFormatManager;
+    juce::AudioTransportSource standaloneTransportSource;
+    std::unique_ptr<juce::AudioFormatReaderSource> standaloneReaderSource;
+    juce::TimeSliceThread standaloneReadAheadThread { "BloomVerbStandaloneReadAhead" };
+    juce::AudioBuffer<float> standalonePlaybackBuffer;
+    juce::SpinLock standalonePlaybackLock;
+    juce::String standaloneLoadedFileLabel { "No file loaded" };
+    std::atomic<bool> standaloneLoopingEnabled { true };
+#endif
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloomVerbAudioProcessor)
 };

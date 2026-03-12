@@ -5,22 +5,6 @@
 namespace
 {
 constexpr float kTwoPi = 6.28318530717958647692f;
-constexpr size_t kLineCount = 8;
-constexpr std::array<float, kLineCount> kBaseDelaySeconds {
-    0.0311f, 0.0377f, 0.0419f, 0.0483f, 0.0557f, 0.0613f, 0.0719f, 0.0837f
-};
-constexpr std::array<float, kLineCount> kInputWeightsLeft {
-    0.85f, 0.35f, 0.65f, -0.45f, 0.55f, -0.30f, 0.40f, -0.70f
-};
-constexpr std::array<float, kLineCount> kInputWeightsRight {
-    -0.30f, 0.80f, -0.45f, 0.60f, -0.65f, 0.55f, -0.25f, 0.72f
-};
-constexpr std::array<float, kLineCount> kOutputWeightsLeft {
-    0.40f, -0.22f, 0.36f, -0.18f, 0.30f, -0.15f, 0.26f, -0.20f
-};
-constexpr std::array<float, kLineCount> kOutputWeightsRight {
-    -0.20f, 0.38f, -0.18f, 0.35f, -0.16f, 0.28f, -0.14f, 0.34f
-};
 
 float saturateSample(float x, float amount)
 {
@@ -38,7 +22,7 @@ namespace bloomverb
 void FDNCore::prepare(double sampleRate)
 {
     sampleRateHz = juce::jmax(1.0, sampleRate);
-    maxDelaySamples = static_cast<int>(std::ceil(sampleRateHz * 0.18));
+    maxDelaySamples = static_cast<int>(std::ceil(sampleRateHz * 0.40));
     maxDelaySamples = juce::jmax(maxDelaySamples, 64);
 
     for (auto& line : delayLines)
@@ -66,13 +50,16 @@ void FDNCore::processSample(float inputLeft,
                             float& outputLeft,
                             float& outputRight)
 {
+    const auto& constellation = settings.constellation != nullptr
+        ? *settings.constellation
+        : bloomverb::getTankConstellation(1);
     const float sizeScale = juce::jlimit(0.48f, 1.75f, 0.60f + settings.size * settings.roomScale * 1.05f);
     const float decayNorm = juce::jlimit(0.0f, 1.0f, (settings.decaySeconds - 0.10f) / (20.0f - 0.10f));
     const float feedback = juce::jlimit(0.45f, 0.995f,
                                         0.36f + decayNorm * 0.56f + settings.freezeFeedbackBoost);
     const float dampingCoeff = juce::jlimit(0.01f, 0.24f,
                                             (0.02f + (1.0f - settings.damping) * 0.18f) * settings.freezeDampingScale);
-    const float motionDepth = juce::jlimit(0.0f, 1.0f, settings.motion) * 0.018f;
+    const float motionDepth = juce::jlimit(0.0f, 1.0f, settings.motion) * 0.010f;
     const float harmonicAmount = juce::jlimit(0.0f, 1.0f, settings.harmonic);
     const float warpAmount = juce::jlimit(0.0f, 1.0f, settings.warp);
     const float textureAmount = juce::jlimit(0.0f, 1.0f, settings.texture);
@@ -89,7 +76,7 @@ void FDNCore::processSample(float inputLeft,
         const float phase = modulationPhases[i];
         const float motionOffset = std::sin(phase) * motionDepth;
         const int delaySamples = juce::jlimit(8, maxDelaySamples,
-                                              static_cast<int>(std::round(kBaseDelaySeconds[i] * sizeScale * sampleRateHz
+                                              static_cast<int>(std::round(constellation.baseDelaySeconds[i] * sizeScale * sampleRateHz
                                                                           + motionOffset * sampleRateHz)));
         const int readPos = (writePos - delaySamples + static_cast<int>(line.size())) % static_cast<int>(line.size());
 
@@ -97,18 +84,18 @@ void FDNCore::processSample(float inputLeft,
         dampStates[i] += (delayed - dampStates[i]) * dampingCoeff;
         float lineValue = dampStates[i];
 
-        const float lineDrive = harmonicAmount * (0.30f + 0.10f * static_cast<float>(i % 3));
-        lineValue = juce::jmap(lineDrive, lineValue, saturateSample(lineValue, lineDrive));
+        const float lineDrive = harmonicAmount * (0.12f + 0.05f * static_cast<float>(i % 3));
+        lineValue = juce::jmap(lineDrive, lineValue, saturateSample(lineValue, lineDrive * 0.85f));
 
-        const float density = warpAmount * (0.10f + (1.0f - settings.releaseState) * 0.18f);
-        warpStates[i] = warpStates[i] * (0.90f + textureAmount * 0.06f) + lineValue * (0.10f - density * 0.04f);
-        lineValue = lineValue * (1.0f + density * 0.22f) + warpStates[i] * density * 0.30f;
+        const float density = warpAmount * (0.05f + (1.0f - settings.releaseState) * 0.08f);
+        warpStates[i] = warpStates[i] * (0.94f + textureAmount * 0.03f) + lineValue * (0.06f - density * 0.02f);
+        lineValue = lineValue * (1.0f + density * 0.08f) + warpStates[i] * density * 0.14f;
         lineValue = juce::jlimit(-4.0f, 4.0f, lineValue);
 
         lineValues[i] = lineValue;
         lineAverage += lineValue;
 
-        modulationPhases[i] += 0.0007f * (0.75f + 0.13f * static_cast<float>(i)) + settings.motion * 0.0008f;
+        modulationPhases[i] += 0.00055f * (0.75f + 0.13f * static_cast<float>(i)) + settings.motion * 0.00035f;
         if (modulationPhases[i] > kTwoPi)
             modulationPhases[i] -= kTwoPi;
     }
@@ -124,13 +111,14 @@ void FDNCore::processSample(float inputLeft,
         auto& writePos = writePositions[i];
 
         const float mixed = -lineValues[i] + 2.0f * lineAverage;
-        const float injected = inputGain * (inputLeft * kInputWeightsLeft[i] + inputRight * kInputWeightsRight[i]);
+        const float injected = inputGain * (inputLeft * constellation.inputWeightsLeft[i]
+                                          + inputRight * constellation.inputWeightsRight[i]);
         const float feedbackSignal = juce::jlimit(-4.0f, 4.0f, mixed * feedback + injected);
         line[static_cast<size_t>(writePos)] = feedbackSignal;
         writePos = (writePos + 1) % static_cast<int>(line.size());
 
-        tankLeft += lineValues[i] * kOutputWeightsLeft[i];
-        tankRight += lineValues[i] * kOutputWeightsRight[i];
+        tankLeft += lineValues[i] * constellation.outputWeightsLeft[i];
+        tankRight += lineValues[i] * constellation.outputWeightsRight[i];
     }
 
     const float width = juce::jlimit(0.0f, 2.0f, settings.width * (0.80f + settings.dynamic * 0.20f));

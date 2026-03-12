@@ -64,15 +64,42 @@ BloomVerbAudioProcessor::BloomVerbAudioProcessor()
       apvts(*this, nullptr, "BloomVerbState", bloomverb::params::createParameterLayout()),
       presetNames(bloomverb::presets::getFactoryPresetNames())
 {
+#if JucePlugin_Build_Standalone
+    standaloneFormatManager.registerBasicFormats();
+    standaloneReadAheadThread.startThread();
+#endif
+}
+
+BloomVerbAudioProcessor::~BloomVerbAudioProcessor()
+{
+#if JucePlugin_Build_Standalone
+    releaseStandalonePlaybackResources();
+    standaloneReadAheadThread.stopThread(2000);
+#endif
 }
 
 void BloomVerbAudioProcessor::prepareToPlay(double sampleRate, int samplesPerBlock)
 {
     engine.prepare(sampleRate, samplesPerBlock, getTotalNumOutputChannels());
+
+#if JucePlugin_Build_Standalone
+    const juce::SpinLock::ScopedLockType lock(standalonePlaybackLock);
+    standalonePlaybackBuffer.setSize(juce::jmax(1, getTotalNumOutputChannels()),
+                                     juce::jmax(1, samplesPerBlock),
+                                     false,
+                                     false,
+                                     true);
+    standaloneTransportSource.prepareToPlay(samplesPerBlock, sampleRate);
+#endif
 }
 
 void BloomVerbAudioProcessor::releaseResources()
 {
+#if JucePlugin_Build_Standalone
+    const juce::SpinLock::ScopedLockType lock(standalonePlaybackLock);
+    standaloneTransportSource.releaseResources();
+    standalonePlaybackBuffer.setSize(0, 0);
+#endif
     engine.reset();
 }
 
@@ -97,8 +124,37 @@ void BloomVerbAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juc
     for (auto channel = totalInputChannels; channel < totalOutputChannels; ++channel)
         buffer.clear(channel, 0, buffer.getNumSamples());
 
+#if JucePlugin_Build_Standalone
+    {
+        const juce::SpinLock::ScopedTryLockType lock(standalonePlaybackLock);
+        if (lock.isLocked() && standaloneReaderSource != nullptr)
+        {
+            if (standalonePlaybackBuffer.getNumChannels() != totalOutputChannels
+                || standalonePlaybackBuffer.getNumSamples() < buffer.getNumSamples())
+            {
+                standalonePlaybackBuffer.setSize(juce::jmax(1, totalOutputChannels),
+                                                buffer.getNumSamples(),
+                                                false,
+                                                false,
+                                                true);
+            }
+
+            standalonePlaybackBuffer.clear();
+            juce::AudioSourceChannelInfo fileInfo(&standalonePlaybackBuffer, 0, buffer.getNumSamples());
+            standaloneTransportSource.getNextAudioBlock(fileInfo);
+
+            for (int channel = 0; channel < totalOutputChannels; ++channel)
+            {
+                const int sourceChannel = juce::jmin(channel, standalonePlaybackBuffer.getNumChannels() - 1);
+                buffer.copyFrom(channel, 0, standalonePlaybackBuffer, sourceChannel, 0, buffer.getNumSamples());
+            }
+        }
+    }
+#endif
+
     const auto runtimeParameters = readRuntimeParameters();
-    updateMeterValue(inputMeterLevel, computePeakLevel(buffer, juce::jmin(2, totalInputChannels)));
+    const auto meterChannels = juce::jmax(1, juce::jmin(2, totalOutputChannels));
+    updateMeterValue(inputMeterLevel, computePeakLevel(buffer, meterChannels));
     freezeVisualAmount.store(runtimeParameters.freeze ? 1.0f : 0.0f);
 
     engine.process(buffer, runtimeParameters);
@@ -289,6 +345,104 @@ void BloomVerbAudioProcessor::updateMeterValue(std::atomic<float>& meter, float 
     const float next = (target > current) ? target : current + (target - current) * release;
     meter.store(juce::jlimit(0.0f, 1.0f, next));
 }
+
+#if JucePlugin_Build_Standalone
+bool BloomVerbAudioProcessor::loadStandalonePlaybackFile(const juce::File& file)
+{
+    if (!file.existsAsFile())
+        return false;
+
+    std::unique_ptr<juce::AudioFormatReader> reader(standaloneFormatManager.createReaderFor(file));
+    if (reader == nullptr)
+        return false;
+
+    const auto sourceSampleRate = reader->sampleRate;
+    const auto sourceNumChannels = static_cast<int>(reader->numChannels);
+    auto replacementSource = std::make_unique<juce::AudioFormatReaderSource>(reader.release(), true);
+    replacementSource->setLooping(standaloneLoopingEnabled.load());
+
+    const juce::SpinLock::ScopedLockType lock(standalonePlaybackLock);
+    standaloneTransportSource.stop();
+    standaloneTransportSource.setSource(nullptr);
+    standaloneReaderSource.reset();
+
+    standaloneReaderSource = std::move(replacementSource);
+    standaloneTransportSource.setSource(standaloneReaderSource.get(),
+                                        32768,
+                                        &standaloneReadAheadThread,
+                                        sourceSampleRate,
+                                        sourceNumChannels);
+    standaloneTransportSource.setPosition(0.0);
+    standaloneTransportSource.start();
+
+    const double lengthSeconds = standaloneReaderSource->getTotalLength() / juce::jmax(1.0, sourceSampleRate);
+    standaloneLoadedFileLabel = "Loaded: " + file.getFileName() + "  |  " + juce::String(lengthSeconds, 1) + " s";
+    return true;
+}
+
+void BloomVerbAudioProcessor::setStandalonePlaybackActive(bool shouldPlay)
+{
+    const juce::SpinLock::ScopedLockType lock(standalonePlaybackLock);
+    if (standaloneReaderSource == nullptr)
+        return;
+
+    if (shouldPlay)
+        standaloneTransportSource.start();
+    else
+        standaloneTransportSource.stop();
+}
+
+bool BloomVerbAudioProcessor::isStandalonePlaybackActive() const noexcept
+{
+    const juce::SpinLock::ScopedLockType lock(const_cast<juce::SpinLock&>(standalonePlaybackLock));
+    return standaloneTransportSource.isPlaying();
+}
+
+bool BloomVerbAudioProcessor::hasStandalonePlaybackFile() const noexcept
+{
+    const juce::SpinLock::ScopedLockType lock(const_cast<juce::SpinLock&>(standalonePlaybackLock));
+    return standaloneReaderSource != nullptr;
+}
+
+void BloomVerbAudioProcessor::setStandalonePlaybackLooping(bool shouldLoop)
+{
+    standaloneLoopingEnabled.store(shouldLoop);
+    const juce::SpinLock::ScopedLockType lock(standalonePlaybackLock);
+    if (standaloneReaderSource != nullptr)
+        standaloneReaderSource->setLooping(shouldLoop);
+}
+
+bool BloomVerbAudioProcessor::isStandalonePlaybackLooping() const noexcept
+{
+    return standaloneLoopingEnabled.load();
+}
+
+juce::String BloomVerbAudioProcessor::getStandalonePlaybackFileLabel() const
+{
+    const juce::SpinLock::ScopedLockType lock(const_cast<juce::SpinLock&>(standalonePlaybackLock));
+    return standaloneLoadedFileLabel;
+}
+
+juce::String BloomVerbAudioProcessor::getStandalonePlaybackStatusText() const
+{
+    const juce::SpinLock::ScopedLockType lock(const_cast<juce::SpinLock&>(standalonePlaybackLock));
+    if (standaloneReaderSource == nullptr)
+        return "Load an audio file to audition BloomVerb";
+
+    juce::String status = standaloneTransportSource.isPlaying() ? "Playing" : "Stopped";
+    status << "  |  " << (standaloneLoopingEnabled.load() ? "Loop on" : "Loop off");
+    return status;
+}
+
+void BloomVerbAudioProcessor::releaseStandalonePlaybackResources()
+{
+    const juce::SpinLock::ScopedLockType lock(standalonePlaybackLock);
+    standaloneTransportSource.stop();
+    standaloneTransportSource.setSource(nullptr);
+    standaloneReaderSource.reset();
+    standalonePlaybackBuffer.setSize(0, 0);
+}
+#endif
 
 juce::AudioProcessorEditor* BloomVerbAudioProcessor::createEditor()
 {

@@ -11,8 +11,10 @@ class LoopTesterComponent final : public juce::AudioAppComponent,
 {
 public:
     LoopTesterComponent()
+        : readAheadThread("BloomVerbLoopTesterReadAhead")
     {
         setOpaque(true);
+        readAheadThread.startThread();
 
         addAndMakeVisible(loadButton);
         loadButton.setButtonText("Load Audio File");
@@ -77,6 +79,7 @@ public:
         transportSource.stop();
         transportSource.setSource(nullptr);
         readerSource.reset();
+        readAheadThread.stopThread(2000);
         shutdownAudio();
     }
 
@@ -257,7 +260,7 @@ private:
         readerSource->setLooping(shouldLoop.load());
         transportSource.setSource(readerSource.get(),
                                   32768,
-                                  nullptr,
+                                  &readAheadThread,
                                   sourceSampleRate,
                                   sourceNumChannels);
         transportSource.setPosition(0.0);
@@ -326,6 +329,7 @@ private:
     std::unique_ptr<juce::AudioFormatReaderSource> readerSource;
     std::unique_ptr<juce::FileChooser> chooser;
     juce::AudioBuffer<float> tempBuffer;
+    juce::TimeSliceThread readAheadThread;
 
     juce::TextButton loadButton;
     juce::TextButton playButton;

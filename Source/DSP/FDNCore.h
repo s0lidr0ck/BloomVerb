@@ -5,6 +5,8 @@
 
 #include <juce_audio_basics/juce_audio_basics.h>
 
+#include "BloomVerbTypeVoicing.h"
+
 namespace bloomverb
 {
 struct FDNSettings
@@ -24,6 +26,7 @@ struct FDNSettings
     float freezeBlend = 0.0f;
     float freezeFeedbackBoost = 0.0f;
     float freezeDampingScale = 1.0f;
+    const TankConstellation* constellation = nullptr;
 };
 
 class FDNCore
@@ -39,7 +42,7 @@ public:
                        float& outputRight);
 
 private:
-    static constexpr size_t lineCount = 8;
+    static constexpr size_t lineCount = kTankLineCount;
 
     double sampleRateHz = 44100.0;
     int maxDelaySamples = 1;

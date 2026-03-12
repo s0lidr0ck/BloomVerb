@@ -16,16 +16,15 @@ public:
     void resized() override;
 
 private:
-    class ParameterPage;
+    class ParameterModule;
     class ProductionLookAndFeel;
     class LevelMeter;
+    class DisplayPanel;
 
     void setupPresetControls();
     void refreshPresetSelection();
-    void setupPageControls();
-    void setupTabButton(juce::TextButton& button, const juce::String& text, int pageIndex);
-    void setActivePage(int pageIndex);
-    void refreshPageVisibility();
+    void setupModules();
+    void refreshStandalonePlaybackState();
     void timerCallback() override;
 
     BloomVerbAudioProcessor& processor;
@@ -46,15 +45,21 @@ private:
     juce::Label typeLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> typeAttachment;
     std::unique_ptr<LevelMeter> levelMeter;
+    std::unique_ptr<DisplayPanel> displayPanel;
 
-    juce::TextButton mainTabButton;
-    juce::TextButton characterTabButton;
-    juce::TextButton advancedTabButton;
+#if JucePlugin_Build_Standalone
+    juce::TextButton loadFileButton;
+    juce::TextButton playFileButton;
+    juce::ToggleButton loopFileToggle;
+    juce::Label fileStatusLabel;
+    std::unique_ptr<juce::FileChooser> fileChooser;
+#endif
 
-    std::unique_ptr<ParameterPage> mainPage;
-    std::unique_ptr<ParameterPage> characterPage;
-    std::unique_ptr<ParameterPage> advancedPage;
-    int activePageIndex = 0;
+    std::unique_ptr<ParameterModule> spaceModule;
+    std::unique_ptr<ParameterModule> bloomModule;
+    std::unique_ptr<ParameterModule> characterModule;
+    std::unique_ptr<ParameterModule> sculptModule;
+    std::unique_ptr<ParameterModule> outputModule;
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloomVerbAudioProcessorEditor)
 };

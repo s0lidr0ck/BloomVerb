@@ -60,6 +60,7 @@ public:
 private:
     static float saturate(float x, float amount);
     static float mapDecaySecondsToTailControl(float decaySeconds);
+    void resetTypeDependentState();
 
     double sampleRateHz = 44100.0;
     int maxSamplesPerBlock = 512;
@@ -91,5 +92,6 @@ private:
     float motionState = 0.0f;
     float warpContourState = 0.5f;
     float decayTailControl = 0.63f;
+    int activeType = -1;
 };
 } // namespace bloomverb
