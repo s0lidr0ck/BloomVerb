@@ -44,6 +44,9 @@ private:
     juce::ComboBox typeBox;
     juce::Label typeLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> typeAttachment;
+    juce::Slider outputFader;
+    juce::Label outputFaderLabel;
+    std::unique_ptr<juce::AudioProcessorValueTreeState::SliderAttachment> outputFaderAttachment;
     std::unique_ptr<LevelMeter> levelMeter;
     std::unique_ptr<DisplayPanel> displayPanel;
 
