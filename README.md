@@ -16,7 +16,13 @@ This repository now contains a JUCE-based BloomVerb plugin implementation with:
 
 ## Build (Linux)
 
-Install dependencies:
+Install dependencies (scripted):
+
+```bash
+./scripts/setup-linux-build-env.sh
+```
+
+Or manually:
 
 ```bash
 sudo apt-get update
