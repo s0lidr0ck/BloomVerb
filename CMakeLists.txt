@@ -48,6 +48,11 @@ target_sources(BloomVerb
         Source/Presets/BloomVerbPreset.h
         Source/Presets/BloomVerbPresetBank.cpp
         Source/Presets/BloomVerbPresetBank.h
+        Source/DSP/FDNCore.cpp
+        Source/DSP/FDNCore.h
+        Source/DSP/FreezeController.cpp
+        Source/DSP/FreezeController.h
+        Source/DSP/BloomVerbSmoothers.h
         Source/DSP/BloomVerbEngine.cpp
         Source/DSP/BloomVerbEngine.h
         Source/DSP/BloomVerbTypeVoicing.cpp
@@ -80,6 +85,11 @@ juce_add_gui_app(BloomVerbLoopTester
 target_sources(BloomVerbLoopTester
     PRIVATE
         Source/Tester/LoopTesterMain.cpp
+        Source/DSP/FDNCore.cpp
+        Source/DSP/FDNCore.h
+        Source/DSP/FreezeController.cpp
+        Source/DSP/FreezeController.h
+        Source/DSP/BloomVerbSmoothers.h
         Source/DSP/BloomVerbEngine.cpp
         Source/DSP/BloomVerbEngine.h
         Source/DSP/BloomVerbTypeVoicing.cpp
@@ -106,6 +116,8 @@ if(BUILD_TESTING)
     set(BLOOMVERB_TEST_COMMON_SOURCES
         Source/DSP/BloomVerbEngine.cpp
         Source/DSP/BloomVerbTypeVoicing.cpp
+        Source/DSP/FDNCore.cpp
+        Source/DSP/FreezeController.cpp
         Source/Parameters/BloomVerbParameters.cpp
         Source/Presets/BloomVerbPreset.cpp
         Source/Presets/BloomVerbPresetBank.cpp
@@ -150,6 +162,10 @@ if(BUILD_TESTING)
     bloomverb_add_test(BloomVerbEngineInvarianceTests Tests/BloomVerbEngineInvarianceTests.cpp)
     bloomverb_add_test(BloomVerbStateTests Tests/BloomVerbStateTests.cpp)
     bloomverb_add_test(BloomVerbPresetRecallTests Tests/BloomVerbPresetRecallTests.cpp)
+    bloomverb_add_test(BloomVerbFDNRegressionTests Tests/BloomVerbFDNRegressionTests.cpp)
+    bloomverb_add_test(BloomVerbFreezeAutomationStressTests Tests/BloomVerbFreezeAutomationStressTests.cpp)
+    bloomverb_add_test(BloomVerbPerformanceGateTests Tests/BloomVerbPerformanceGateTests.cpp)
+    bloomverb_add_test(BloomVerbMonoFoldDownTests Tests/BloomVerbMonoFoldDownTests.cpp)
 
     target_sources(BloomVerbPresetRecallTests
         PRIVATE

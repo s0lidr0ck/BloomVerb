@@ -30,10 +30,10 @@ public:
     bool isMidiEffect() const override { return false; }
     double getTailLengthSeconds() const override;
 
-    int getNumPrograms() override { return 1; }
-    int getCurrentProgram() override { return 0; }
-    void setCurrentProgram(int) override {}
-    const juce::String getProgramName(int) override { return {}; }
+    int getNumPrograms() override;
+    int getCurrentProgram() override;
+    void setCurrentProgram(int index) override;
+    const juce::String getProgramName(int index) override;
     void changeProgramName(int, const juce::String&) override {}
 
     void getStateInformation(juce::MemoryBlock& destData) override;
@@ -47,15 +47,22 @@ public:
     void applyPresetByIndex(int presetIndex);
     void applyNextPreset();
     void applyPreviousPreset();
+    float getInputMeterLevel() const noexcept { return inputMeterLevel.load(); }
+    float getOutputMeterLevel() const noexcept { return outputMeterLevel.load(); }
+    float getFreezeVisualAmount() const noexcept { return freezeVisualAmount.load(); }
 
 private:
     bloomverb::RuntimeParameters readRuntimeParameters() const;
     void applyPresetInternal(const bloomverb::presets::BloomVerbPreset& preset);
+    void updateMeterValue(std::atomic<float>& meter, float target) const;
 
     juce::AudioProcessorValueTreeState apvts;
     bloomverb::BloomVerbEngine engine;
     juce::StringArray presetNames;
     std::atomic<int> currentPresetIndex { 0 };
+    std::atomic<float> inputMeterLevel { 0.0f };
+    std::atomic<float> outputMeterLevel { 0.0f };
+    std::atomic<float> freezeVisualAmount { 0.0f };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloomVerbAudioProcessor)
 };

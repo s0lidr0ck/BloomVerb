@@ -140,6 +140,7 @@ bool checkStateRoundTrip(ParameterContractTestProcessor& a, ParameterContractTes
 
     return ok;
 }
+
 } // namespace
 
 int main()

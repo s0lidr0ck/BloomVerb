@@ -53,24 +53,24 @@ Status: **Done (first voicing pass)**
 - [x] Harmonic tail coloring integrated
 - [x] Warp tail contour behavior integrated
 - [x] Swell + texture interactions integrated
-- [ ] Dedicated custom in-loop FDN architecture
+- [x] Dedicated custom in-loop FDN architecture
 
-Status: **In Progress**
+Status: **Done**
 
 ## Stage E — Advanced shaping
 - [x] Tone/low-cut/high-cut integrated
 - [x] Duck/mod/bloom/distance/transient preserve parameters integrated
 - [x] Freeze behavior implemented
-- [ ] Freeze transition polish under extreme automation
+- [x] Freeze transition polish under extreme automation
 
-Status: **In Progress**
+Status: **Done**
 
 ## Stage F — Productization
 - [x] Multi-page placeholder UI (Main/Character/Advanced)
 - [x] Factory preset scaffolding + browsing
 - [x] Headless regression tests (engine/state/invariance/preset recall)
-- [ ] Visual polish pass (asset phase)
-- [ ] Optional visualizers/meters
+- [x] Visual polish pass (assetless production skin)
+- [x] Optional visualizers/meters
 - [ ] Cross-host matrix QA pass
 
 Status: **In Progress**
@@ -83,22 +83,22 @@ Use this exact order during development:
 
 1. **Configure**
 ```bash
-cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++
+cmake --preset linux-tests
 ```
 
 2. **Build everything**
 ```bash
-cmake --build build -j4
+cmake --build --preset linux-tests-build
 ```
 
 3. **Run headless regression tests**
 ```bash
-ctest --test-dir build --output-on-failure
+ctest --preset linux-tests-test
 ```
 
 4. **Manual audio sanity (loop tester)**
 ```bash
-./build/BloomVerbLoopTester_artefacts/BloomVerb\ Loop\ Tester
+./out/build/linux-release/BloomVerbLoopTester_artefacts/BloomVerb\ Loop\ Tester
 ```
 
 5. **DAW/plugin sanity**
@@ -116,6 +116,10 @@ ctest --test-dir build --output-on-failure
 - `BloomVerbEngineInvarianceTests`
 - `BloomVerbStateTests`
 - `BloomVerbPresetRecallTests`
+- `BloomVerbFDNRegressionTests`
+- `BloomVerbFreezeAutomationStressTests`
+- `BloomVerbPerformanceGateTests`
+- `BloomVerbMonoFoldDownTests`
 
 If any fail, no merge.
 
@@ -123,7 +127,7 @@ If any fail, no merge.
 
 ## 5) Next-up queue (priority)
 
-1. Replace interim tank with a more explicit custom FDN architecture.
-2. Add stronger freeze-entry/exit smoothing and automation stress QA.
-3. Add performance benchmark target + CI perf gate.
+1. Execute the host QA matrix in `docs/HOST_QA_MATRIX.md`.
+2. Add preset-character retuning against the new FDN tank if required by listening tests.
+3. Expand performance coverage with multi-instance benchmarks.
 

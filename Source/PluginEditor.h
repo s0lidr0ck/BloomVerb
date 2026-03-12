@@ -5,7 +5,8 @@
 
 #include "PluginProcessor.h"
 
-class BloomVerbAudioProcessorEditor final : public juce::AudioProcessorEditor
+class BloomVerbAudioProcessorEditor final : public juce::AudioProcessorEditor,
+                                            private juce::Timer
 {
 public:
     explicit BloomVerbAudioProcessorEditor(BloomVerbAudioProcessor&);
@@ -16,7 +17,8 @@ public:
 
 private:
     class ParameterPage;
-    class AnalogPlaceholderLookAndFeel;
+    class ProductionLookAndFeel;
+    class LevelMeter;
 
     void setupPresetControls();
     void refreshPresetSelection();
@@ -24,13 +26,15 @@ private:
     void setupTabButton(juce::TextButton& button, const juce::String& text, int pageIndex);
     void setActivePage(int pageIndex);
     void refreshPageVisibility();
+    void timerCallback() override;
 
     BloomVerbAudioProcessor& processor;
     juce::AudioProcessorValueTreeState& apvts;
-    std::unique_ptr<AnalogPlaceholderLookAndFeel> lookAndFeel;
+    std::unique_ptr<ProductionLookAndFeel> lookAndFeel;
 
     juce::Label titleLabel;
     juce::Label subtitleLabel;
+    juce::Label statusLabel;
 
     juce::Label presetLabel;
     juce::ComboBox presetBox;
@@ -41,6 +45,7 @@ private:
     juce::ComboBox typeBox;
     juce::Label typeLabel;
     std::unique_ptr<juce::AudioProcessorValueTreeState::ComboBoxAttachment> typeAttachment;
+    std::unique_ptr<LevelMeter> levelMeter;
 
     juce::TextButton mainTabButton;
     juce::TextButton characterTabButton;

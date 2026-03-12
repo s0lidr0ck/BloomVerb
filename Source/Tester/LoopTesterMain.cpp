@@ -20,7 +20,12 @@ public:
 
         addAndMakeVisible(playButton);
         playButton.setButtonText("Play");
+        playButton.setEnabled(false);
         playButton.onClick = [this] { togglePlayback(); };
+
+        addAndMakeVisible(snapshotButton);
+        snapshotButton.setButtonText("Copy QA Snapshot");
+        snapshotButton.onClick = [this] { copyQaSnapshot(); };
 
         addAndMakeVisible(loopToggle);
         loopToggle.setButtonText("Loop");
@@ -36,6 +41,10 @@ public:
         fileLabel.setText("No file loaded", juce::dontSendNotification);
         fileLabel.setColour(juce::Label::textColourId, juce::Colours::white);
 
+        addAndMakeVisible(statusLabel);
+        statusLabel.setText("Load a loop to begin validation", juce::dontSendNotification);
+        statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8fd4ff));
+
         typeLabel.setText("Type", juce::dontSendNotification);
         addAndMakeVisible(typeLabel);
         addAndMakeVisible(typeBox);
@@ -49,6 +58,14 @@ public:
         addSlider(motionSlider, motionLabel, "Motion", 0.0, 1.0, 0.3, [this] { motion.store(static_cast<float>(motionSlider.getValue())); });
         addSlider(harmonicSlider, harmonicLabel, "Harmonic", 0.0, 1.0, 0.2, [this] { harmonic.store(static_cast<float>(harmonicSlider.getValue())); });
         addSlider(warpSlider, warpLabel, "Warp", 0.0, 1.0, 0.3, [this] { warp.store(static_cast<float>(warpSlider.getValue())); });
+
+        addAndMakeVisible(freezeToggle);
+        freezeToggle.setButtonText("Freeze");
+        freezeToggle.onClick = [this]
+        {
+            freezeEnabled.store(freezeToggle.getToggleState());
+            updateStatusLabel();
+        };
 
         formatManager.registerBasicFormats();
         setAudioChannels(0, 2);
@@ -95,6 +112,7 @@ public:
         params.motion = motion.load();
         params.harmonic = harmonic.load();
         params.warp = warp.load();
+        params.freeze = freezeEnabled.load();
 
         engine.process(tempBuffer, params);
 
@@ -125,6 +143,8 @@ public:
         top.removeFromLeft(8);
         playButton.setBounds(top.removeFromLeft(100));
         top.removeFromLeft(8);
+        snapshotButton.setBounds(top.removeFromLeft(150));
+        top.removeFromLeft(8);
         loopToggle.setBounds(top.removeFromLeft(90));
         top.removeFromLeft(12);
         typeLabel.setBounds(top.removeFromLeft(36));
@@ -132,16 +152,18 @@ public:
 
         area.removeFromTop(10);
         fileLabel.setBounds(area.removeFromTop(28));
+        statusLabel.setBounds(area.removeFromTop(24));
 
         area.removeFromTop(10);
         auto row = area.removeFromTop(180);
-        const int cellWidth = row.getWidth() / 6;
+        const int cellWidth = row.getWidth() / 7;
         layoutSliderCell(row, cellWidth, mixLabel, mixSlider);
         layoutSliderCell(row, cellWidth, decayLabel, decaySlider);
         layoutSliderCell(row, cellWidth, sizeLabel, sizeSlider);
         layoutSliderCell(row, cellWidth, motionLabel, motionSlider);
         layoutSliderCell(row, cellWidth, harmonicLabel, harmonicSlider);
         layoutSliderCell(row, cellWidth, warpLabel, warpSlider);
+        freezeToggle.setBounds(row.removeFromLeft(cellWidth).reduced(18, 72));
     }
 
     void tryLoadFileFromArgument(const juce::String& commandLine)
@@ -163,6 +185,8 @@ private:
             playButton.setButtonText("Stop");
         else if (!transportSource.isPlaying() && playButton.getButtonText() != "Play")
             playButton.setButtonText("Play");
+
+        updateStatusLabel();
     }
 
     void addSlider(juce::Slider& slider,
@@ -217,6 +241,8 @@ private:
         if (reader == nullptr)
         {
             fileLabel.setText("Unsupported file: " + file.getFileName(), juce::dontSendNotification);
+            playButton.setEnabled(false);
+            statusLabel.setText("Unsupported file format", juce::dontSendNotification);
             return;
         }
 
@@ -236,8 +262,13 @@ private:
                                   sourceNumChannels);
         transportSource.setPosition(0.0);
         transportSource.start();
+        playButton.setEnabled(true);
 
-        fileLabel.setText("Loaded: " + file.getFullPathName(), juce::dontSendNotification);
+        const double lengthSeconds = readerSource->getTotalLength() / juce::jmax(1.0, sourceSampleRate);
+        currentFileName = file.getFileName();
+        fileLabel.setText("Loaded: " + file.getFileName() + "  •  " + juce::String(lengthSeconds, 1) + " s",
+                          juce::dontSendNotification);
+        updateStatusLabel();
     }
 
     void togglePlayback()
@@ -249,6 +280,44 @@ private:
             transportSource.stop();
         else
             transportSource.start();
+
+        updateStatusLabel();
+    }
+
+    void updateStatusLabel()
+    {
+        if (readerSource == nullptr)
+        {
+            statusLabel.setText("Load a loop to begin validation", juce::dontSendNotification);
+            return;
+        }
+
+        juce::String status = transportSource.isPlaying() ? "Playing" : "Stopped";
+        status << "  •  ";
+        status << (shouldLoop.load() ? "Loop on" : "Loop off");
+        status << "  •  ";
+        status << (freezeEnabled.load() ? "Freeze armed" : "Freeze ready");
+        statusLabel.setText(status, juce::dontSendNotification);
+    }
+
+    void copyQaSnapshot()
+    {
+        juce::String snapshot;
+        snapshot << "BloomVerb Loop Tester QA Snapshot\n";
+        snapshot << "AppVersion: 0.1.0\n";
+        snapshot << "File: " << currentFileName << "\n";
+        snapshot << "Transport: " << (transportSource.isPlaying() ? "Playing" : "Stopped") << "\n";
+        snapshot << "Loop: " << (shouldLoop.load() ? "On" : "Off") << "\n";
+        snapshot << "Freeze: " << (freezeEnabled.load() ? "Armed" : "Ready") << "\n";
+        snapshot << "Type: " << typeBox.getText() << "\n";
+        snapshot << "Mix: " << juce::String(mix.load(), 3) << "\n";
+        snapshot << "Decay: " << juce::String(decay.load(), 3) << "\n";
+        snapshot << "Size: " << juce::String(size.load(), 3) << "\n";
+        snapshot << "Motion: " << juce::String(motion.load(), 3) << "\n";
+        snapshot << "Harmonic: " << juce::String(harmonic.load(), 3) << "\n";
+        snapshot << "Warp: " << juce::String(warp.load(), 3) << "\n";
+        juce::SystemClipboard::copyTextToClipboard(snapshot);
+        statusLabel.setText("QA snapshot copied to clipboard", juce::dontSendNotification);
     }
 
     bloomverb::BloomVerbEngine engine;
@@ -260,8 +329,11 @@ private:
 
     juce::TextButton loadButton;
     juce::TextButton playButton;
+    juce::TextButton snapshotButton;
     juce::ToggleButton loopToggle;
+    juce::ToggleButton freezeToggle;
     juce::Label fileLabel;
+    juce::Label statusLabel;
     juce::Label typeLabel;
     juce::ComboBox typeBox;
 
@@ -276,6 +348,8 @@ private:
     std::atomic<float> harmonic { 0.2f };
     std::atomic<float> warp { 0.3f };
     std::atomic<bool> shouldLoop { true };
+    std::atomic<bool> freezeEnabled { false };
+    juce::String currentFileName { "None" };
 };
 
 class LoopTesterWindow final : public juce::DocumentWindow

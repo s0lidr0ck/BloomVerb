@@ -45,7 +45,8 @@ Preset::ParameterValueMap makeDefaultParameterValues()
     };
 }
 
-Preset makePreset(std::string name,
+Preset makePreset(std::string id,
+                  std::string name,
                   std::string category,
                   std::initializer_list<ParameterOverride> overrides)
 {
@@ -53,7 +54,7 @@ Preset makePreset(std::string name,
     for (const auto& [parameterId, value] : overrides)
         values[parameterId] = value;
 
-    return { std::move(name), std::move(category), std::move(values) };
+    return { std::move(id), std::move(name), std::move(category), std::move(values) };
 }
 } // namespace
 
@@ -71,7 +72,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
     std::vector<BloomVerbPreset> presets;
     presets.reserve(15);
 
-    presets.push_back(makePreset("Small Plate", utility,
+    presets.push_back(makePreset("small-plate", "Small Plate", utility,
         {
             { IDs::type, 0.0f }, { IDs::size, 0.34f }, { IDs::decaySeconds, 1.20f }, { IDs::preDelayMs, 8.0f },
             { IDs::diffusion, 0.58f }, { IDs::damping, 0.56f }, { IDs::early, 0.52f }, { IDs::width, 0.95f },
@@ -81,7 +82,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::transientPreserve, 0.70f },
         }));
 
-    presets.push_back(makePreset("Tight Room", utility,
+    presets.push_back(makePreset("tight-room", "Tight Room", utility,
         {
             { IDs::type, 2.0f }, { IDs::size, 0.22f }, { IDs::decaySeconds, 0.75f }, { IDs::preDelayMs, 2.0f },
             { IDs::diffusion, 0.46f }, { IDs::damping, 0.62f }, { IDs::early, 0.62f }, { IDs::width, 0.90f },
@@ -91,7 +92,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::transientPreserve, 0.85f },
         }));
 
-    presets.push_back(makePreset("Clean Hall", utility,
+    presets.push_back(makePreset("clean-hall", "Clean Hall", utility,
         {
             { IDs::type, 1.0f }, { IDs::size, 0.48f }, { IDs::decaySeconds, 2.40f }, { IDs::preDelayMs, 18.0f },
             { IDs::diffusion, 0.68f }, { IDs::damping, 0.50f }, { IDs::early, 0.30f }, { IDs::width, 1.10f },
@@ -100,7 +101,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.30f }, { IDs::bloomAmount, 0.35f }, { IDs::distance, 0.35f }, { IDs::transientPreserve, 0.60f },
         }));
 
-    presets.push_back(makePreset("Bloom Pad", ambient,
+    presets.push_back(makePreset("bloom-pad", "Bloom Pad", ambient,
         {
             { IDs::type, 4.0f }, { IDs::size, 0.82f }, { IDs::decaySeconds, 10.5f }, { IDs::preDelayMs, 42.0f },
             { IDs::diffusion, 0.83f }, { IDs::damping, 0.36f }, { IDs::early, 0.20f }, { IDs::width, 1.45f },
@@ -110,7 +111,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.22f }, { IDs::bloomAmount, 0.75f }, { IDs::distance, 0.62f }, { IDs::transientPreserve, 0.40f },
         }));
 
-    presets.push_back(makePreset("Cloud Lift", ambient,
+    presets.push_back(makePreset("cloud-lift", "Cloud Lift", ambient,
         {
             { IDs::type, 3.0f }, { IDs::size, 0.90f }, { IDs::decaySeconds, 12.8f }, { IDs::preDelayMs, 55.0f },
             { IDs::diffusion, 0.78f }, { IDs::damping, 0.30f }, { IDs::early, 0.14f }, { IDs::width, 1.65f },
@@ -120,7 +121,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.18f }, { IDs::bloomAmount, 0.82f }, { IDs::distance, 0.72f }, { IDs::transientPreserve, 0.35f },
         }));
 
-    presets.push_back(makePreset("Dream Wash", ambient,
+    presets.push_back(makePreset("dream-wash", "Dream Wash", ambient,
         {
             { IDs::type, 7.0f }, { IDs::size, 0.88f }, { IDs::decaySeconds, 14.5f }, { IDs::preDelayMs, 65.0f },
             { IDs::diffusion, 0.85f }, { IDs::damping, 0.34f }, { IDs::early, 0.12f }, { IDs::width, 1.72f },
@@ -130,7 +131,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.15f }, { IDs::bloomAmount, 0.88f }, { IDs::distance, 0.78f }, { IDs::transientPreserve, 0.28f },
         }));
 
-    presets.push_back(makePreset("Swell Plate", guitar,
+    presets.push_back(makePreset("swell-plate", "Swell Plate", guitar,
         {
             { IDs::type, 0.0f }, { IDs::size, 0.56f }, { IDs::decaySeconds, 4.20f }, { IDs::preDelayMs, 30.0f },
             { IDs::diffusion, 0.70f }, { IDs::damping, 0.48f }, { IDs::early, 0.36f }, { IDs::width, 1.25f },
@@ -140,7 +141,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.48f }, { IDs::bloomAmount, 0.52f }, { IDs::distance, 0.46f }, { IDs::transientPreserve, 0.66f },
         }));
 
-    presets.push_back(makePreset("Ambient Bloom", guitar,
+    presets.push_back(makePreset("ambient-bloom", "Ambient Bloom", guitar,
         {
             { IDs::type, 4.0f }, { IDs::size, 0.74f }, { IDs::decaySeconds, 7.80f }, { IDs::preDelayMs, 36.0f },
             { IDs::diffusion, 0.76f }, { IDs::damping, 0.40f }, { IDs::early, 0.28f }, { IDs::width, 1.38f },
@@ -150,7 +151,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.42f }, { IDs::bloomAmount, 0.70f }, { IDs::distance, 0.55f }, { IDs::transientPreserve, 0.58f },
         }));
 
-    presets.push_back(makePreset("Lead Lift", guitar,
+    presets.push_back(makePreset("lead-lift", "Lead Lift", guitar,
         {
             { IDs::type, 1.0f }, { IDs::size, 0.44f }, { IDs::decaySeconds, 2.30f }, { IDs::preDelayMs, 24.0f },
             { IDs::diffusion, 0.62f }, { IDs::damping, 0.52f }, { IDs::early, 0.40f }, { IDs::width, 1.18f },
@@ -161,7 +162,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::transientPreserve, 0.78f },
         }));
 
-    presets.push_back(makePreset("Intimate Chamber", vocal,
+    presets.push_back(makePreset("intimate-chamber", "Intimate Chamber", vocal,
         {
             { IDs::type, 6.0f }, { IDs::size, 0.36f }, { IDs::decaySeconds, 1.55f }, { IDs::preDelayMs, 14.0f },
             { IDs::diffusion, 0.60f }, { IDs::damping, 0.58f }, { IDs::early, 0.48f }, { IDs::width, 1.05f },
@@ -171,7 +172,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.52f }, { IDs::bloomAmount, 0.24f }, { IDs::distance, 0.26f }, { IDs::transientPreserve, 0.82f },
         }));
 
-    presets.push_back(makePreset("Modern Hall", vocal,
+    presets.push_back(makePreset("modern-hall", "Modern Hall", vocal,
         {
             { IDs::type, 1.0f }, { IDs::size, 0.58f }, { IDs::decaySeconds, 3.20f }, { IDs::preDelayMs, 26.0f },
             { IDs::diffusion, 0.72f }, { IDs::damping, 0.46f }, { IDs::early, 0.34f }, { IDs::width, 1.20f },
@@ -181,7 +182,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.58f }, { IDs::bloomAmount, 0.42f }, { IDs::distance, 0.40f }, { IDs::transientPreserve, 0.74f },
         }));
 
-    presets.push_back(makePreset("Air Plate", vocal,
+    presets.push_back(makePreset("air-plate", "Air Plate", vocal,
         {
             { IDs::type, 0.0f }, { IDs::size, 0.42f }, { IDs::decaySeconds, 2.10f }, { IDs::preDelayMs, 20.0f },
             { IDs::diffusion, 0.64f }, { IDs::damping, 0.42f }, { IDs::early, 0.38f }, { IDs::width, 1.15f },
@@ -191,7 +192,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::duckAmount, 0.54f }, { IDs::bloomAmount, 0.32f }, { IDs::distance, 0.34f }, { IDs::transientPreserve, 0.76f },
         }));
 
-    presets.push_back(makePreset("Suspended Space", cinematic,
+    presets.push_back(makePreset("suspended-space", "Suspended Space", cinematic,
         {
             { IDs::type, 3.0f }, { IDs::size, 0.96f }, { IDs::decaySeconds, 16.0f }, { IDs::preDelayMs, 82.0f },
             { IDs::diffusion, 0.88f }, { IDs::damping, 0.28f }, { IDs::early, 0.08f }, { IDs::width, 1.80f },
@@ -202,7 +203,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::transientPreserve, 0.22f },
         }));
 
-    presets.push_back(makePreset("Distant Signal", cinematic,
+    presets.push_back(makePreset("distant-signal", "Distant Signal", cinematic,
         {
             { IDs::type, 5.0f }, { IDs::size, 0.78f }, { IDs::decaySeconds, 11.6f }, { IDs::preDelayMs, 95.0f },
             { IDs::diffusion, 0.82f }, { IDs::damping, 0.41f }, { IDs::early, 0.10f }, { IDs::width, 1.58f },
@@ -213,7 +214,7 @@ std::vector<BloomVerbPreset> createFactoryPresetBank()
             { IDs::transientPreserve, 0.18f },
         }));
 
-    presets.push_back(makePreset("Blooming Void", cinematic,
+    presets.push_back(makePreset("blooming-void", "Blooming Void", cinematic,
         {
             { IDs::type, 7.0f }, { IDs::size, 1.00f }, { IDs::decaySeconds, 20.0f }, { IDs::preDelayMs, 120.0f },
             { IDs::diffusion, 0.90f }, { IDs::damping, 0.24f }, { IDs::early, 0.05f }, { IDs::width, 1.90f },

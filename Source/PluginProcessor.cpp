@@ -3,6 +3,61 @@
 
 #include <cmath>
 
+namespace
+{
+constexpr auto kStateVersionProperty = "state_version";
+constexpr auto kSelectedPresetIndexProperty = "selected_preset_index";
+constexpr auto kSelectedPresetIdProperty = "selected_preset_id";
+constexpr auto kSelectedPresetNameProperty = "selected_preset_name";
+constexpr int kStateVersion = 2;
+
+float computePeakLevel(const juce::AudioBuffer<float>& buffer, int numChannels)
+{
+    float peak = 0.0f;
+    for (int channel = 0; channel < numChannels; ++channel)
+    {
+        const float* data = buffer.getReadPointer(channel);
+        for (int sample = 0; sample < buffer.getNumSamples(); ++sample)
+            peak = juce::jmax(peak, std::abs(data[sample]));
+    }
+
+    return peak;
+}
+
+int findPresetIndexFromState(const juce::ValueTree& state,
+                             const std::vector<bloomverb::presets::BloomVerbPreset>& presets)
+{
+    if (presets.empty())
+        return -1;
+
+    const auto presetId = state.getProperty(kSelectedPresetIdProperty).toString();
+    if (presetId.isNotEmpty())
+    {
+        for (size_t i = 0; i < presets.size(); ++i)
+        {
+            if (presetId == juce::String(presets[i].id))
+                return static_cast<int>(i);
+        }
+    }
+
+    const auto presetName = state.getProperty(kSelectedPresetNameProperty).toString();
+    if (presetName.isNotEmpty())
+    {
+        for (size_t i = 0; i < presets.size(); ++i)
+        {
+            if (presetName == juce::String(presets[i].name))
+                return static_cast<int>(i);
+        }
+    }
+
+    const auto presetIndex = static_cast<int>(state.getProperty(kSelectedPresetIndexProperty, -1));
+    if (presetIndex >= 0 && presetIndex < static_cast<int>(presets.size()))
+        return presetIndex;
+
+    return 0;
+}
+}
+
 BloomVerbAudioProcessor::BloomVerbAudioProcessor()
     : AudioProcessor(BusesProperties().withInput("Input", juce::AudioChannelSet::stereo(), true)
                                      .withOutput("Output", juce::AudioChannelSet::stereo(), true)),
@@ -42,7 +97,12 @@ void BloomVerbAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juc
     for (auto channel = totalInputChannels; channel < totalOutputChannels; ++channel)
         buffer.clear(channel, 0, buffer.getNumSamples());
 
-    engine.process(buffer, readRuntimeParameters());
+    const auto runtimeParameters = readRuntimeParameters();
+    updateMeterValue(inputMeterLevel, computePeakLevel(buffer, juce::jmin(2, totalInputChannels)));
+    freezeVisualAmount.store(runtimeParameters.freeze ? 1.0f : 0.0f);
+
+    engine.process(buffer, runtimeParameters);
+    updateMeterValue(outputMeterLevel, computePeakLevel(buffer, juce::jmin(2, totalOutputChannels)));
 }
 
 double BloomVerbAudioProcessor::getTailLengthSeconds() const
@@ -53,6 +113,29 @@ double BloomVerbAudioProcessor::getTailLengthSeconds() const
 const juce::StringArray& BloomVerbAudioProcessor::getPresetNames() const noexcept
 {
     return presetNames;
+}
+
+int BloomVerbAudioProcessor::getNumPrograms()
+{
+    return juce::jmax(1, presetNames.size());
+}
+
+int BloomVerbAudioProcessor::getCurrentProgram()
+{
+    return juce::jmax(0, getCurrentPresetIndex());
+}
+
+void BloomVerbAudioProcessor::setCurrentProgram(int index)
+{
+    applyPresetByIndex(index);
+}
+
+const juce::String BloomVerbAudioProcessor::getProgramName(int index)
+{
+    if (index >= 0 && index < presetNames.size())
+        return presetNames[index];
+
+    return {};
 }
 
 int BloomVerbAudioProcessor::getCurrentPresetIndex() const noexcept
@@ -119,7 +202,19 @@ void BloomVerbAudioProcessor::applyPreviousPreset()
 
 void BloomVerbAudioProcessor::getStateInformation(juce::MemoryBlock& destData)
 {
-    if (const auto state = apvts.copyState(); auto xml = state.createXml())
+    auto state = apvts.copyState();
+    state.setProperty(kStateVersionProperty, kStateVersion, nullptr);
+    state.setProperty(kSelectedPresetIndexProperty, getCurrentPresetIndex(), nullptr);
+
+    const auto presetIndex = getCurrentPresetIndex();
+    const auto& presets = bloomverb::presets::getFactoryPresets();
+    if (presetIndex >= 0 && presetIndex < static_cast<int>(presets.size()))
+    {
+        state.setProperty(kSelectedPresetIdProperty, juce::String(presets[static_cast<size_t>(presetIndex)].id), nullptr);
+        state.setProperty(kSelectedPresetNameProperty, juce::String(presets[static_cast<size_t>(presetIndex)].name), nullptr);
+    }
+
+    if (auto xml = state.createXml())
         copyXmlToBinary(*xml, destData);
 }
 
@@ -128,7 +223,11 @@ void BloomVerbAudioProcessor::setStateInformation(const void* data, int sizeInBy
     if (const auto xml = getXmlFromBinary(data, sizeInBytes))
     {
         if (xml->hasTagName(apvts.state.getType()))
-            apvts.replaceState(juce::ValueTree::fromXml(*xml));
+        {
+            auto restoredState = juce::ValueTree::fromXml(*xml);
+            apvts.replaceState(restoredState);
+            currentPresetIndex.store(findPresetIndexFromState(restoredState, bloomverb::presets::getFactoryPresets()));
+        }
     }
 }
 
@@ -181,6 +280,14 @@ void BloomVerbAudioProcessor::applyPresetInternal(const bloomverb::presets::Bloo
 
     for (const auto& [parameterId, value] : preset.parameterValuesById)
         setParameterValue(parameterId, value);
+}
+
+void BloomVerbAudioProcessor::updateMeterValue(std::atomic<float>& meter, float target) const
+{
+    const float current = meter.load();
+    const float release = 0.18f;
+    const float next = (target > current) ? target : current + (target - current) * release;
+    meter.store(juce::jlimit(0.0f, 1.0f, next));
 }
 
 juce::AudioProcessorEditor* BloomVerbAudioProcessor::createEditor()

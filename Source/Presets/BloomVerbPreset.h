@@ -12,6 +12,7 @@ struct BloomVerbPreset
 {
     using ParameterValueMap = std::unordered_map<std::string, float>;
 
+    std::string id;
     std::string name;
     std::string category;
     ParameterValueMap parameterValuesById;

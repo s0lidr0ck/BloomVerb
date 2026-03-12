@@ -1,4 +1,5 @@
 #include <cmath>
+#include <set>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -130,6 +131,18 @@ int main()
 
     const auto& presetNames = sourceProcessor.getPresetNames();
     ok &= expect(presetNames.size() >= 2, "Expected at least 2 factory presets");
+    const auto& presets = bloomverb::presets::getFactoryPresets();
+    ok &= expect(static_cast<int>(presets.size()) == presetNames.size(), "Factory preset metadata/name count mismatch");
+    ok &= expect(sourceProcessor.getNumPrograms() == presetNames.size(), "Program API count should match preset count");
+    if (!ok)
+        return 1;
+
+    std::set<std::string> presetIds;
+    for (const auto& preset : presets)
+    {
+        ok &= expect(!preset.id.empty(), "Factory preset ID must not be empty");
+        ok &= expect(presetIds.insert(preset.id).second, "Factory preset IDs must be unique");
+    }
     if (!ok)
         return 1;
 
@@ -137,6 +150,8 @@ int main()
     const int secondPresetIndex = presetNames.size() > 3 ? 3 : 1;
 
     sourceProcessor.applyPresetByIndex(firstPresetIndex);
+    ok &= expect(sourceProcessor.getCurrentProgram() == firstPresetIndex, "Current program mismatch after first preset apply");
+    ok &= expect(sourceProcessor.getProgramName(firstPresetIndex) == presetNames[firstPresetIndex], "Program name mismatch for first preset");
     const auto first = captureSnapshot(sourceProcessor, presetNames, ok);
     ok &= checkSnapshotFinite(first, "First preset snapshot");
     ok &= expect(first.presetIndex == firstPresetIndex, "First preset index did not apply correctly");
@@ -146,6 +161,12 @@ int main()
     ok &= checkSnapshotFinite(second, "Second preset snapshot");
     ok &= expect(second.presetIndex == secondPresetIndex, "Second preset index did not apply correctly");
     ok &= expect(second.presetName == presetNames[secondPresetIndex], "Second preset name mismatch");
+    ok &= expect(sourceProcessor.getProgramName(secondPresetIndex) == presetNames[secondPresetIndex], "Program API name mismatch");
+
+    sourceProcessor.setCurrentProgram(firstPresetIndex);
+    const auto viaProgram = captureSnapshot(sourceProcessor, presetNames, ok);
+    ok &= expect(viaProgram.presetIndex == firstPresetIndex, "setCurrentProgram did not update preset selection");
+    sourceProcessor.applyPresetByIndex(secondPresetIndex);
 
     const bool snapshotsDiffer = !isNearlyEqual(first.mix, second.mix)
         || !isNearlyEqual(first.decay, second.decay)
@@ -157,6 +178,18 @@ int main()
     juce::MemoryBlock state;
     sourceProcessor.getStateInformation(state);
     ok &= expect(state.getSize() > 0, "Serialized state should not be empty");
+    if (const auto xml = juce::AudioProcessor::getXmlFromBinary(state.getData(), static_cast<int>(state.getSize())))
+    {
+        ok &= expect(xml->hasAttribute("state_version"), "Serialized plugin state missing state_version");
+        ok &= expect(xml->hasAttribute("selected_preset_index"), "Serialized plugin state missing selected_preset_index");
+        ok &= expect(xml->hasAttribute("selected_preset_id"), "Serialized plugin state missing selected_preset_id");
+        ok &= expect(xml->getStringAttribute("selected_preset_id") == juce::String(presets[static_cast<size_t>(secondPresetIndex)].id),
+                     "Serialized preset ID did not match factory preset ID");
+    }
+    else
+    {
+        ok &= expect(false, "Serialized plugin state XML was null");
+    }
 
     restoredProcessor.setStateInformation(state.getData(), static_cast<int>(state.getSize()));
     const auto restored = captureSnapshot(restoredProcessor, presetNames, ok);
@@ -168,19 +201,8 @@ int main()
     ok &= expect(isNearlyEqual(restored.duckAmount, second.duckAmount), "Duck amount was not restored correctly");
     ok &= expect(isNearlyEqual(restored.freeze, second.freeze), "Freeze was not restored correctly");
 
-    if (restored.presetIndex == second.presetIndex)
-    {
-        ok &= expect(restored.presetName == second.presetName, "Serialized preset name did not round-trip with index");
-    }
-    else
-    {
-        const int expectedDefaultIndex = 0;
-        ok &= expect(restored.presetIndex == expectedDefaultIndex,
-                     "Preset index expected to reset to default when not serialized");
-        if (restored.presetIndex >= 0 && restored.presetIndex < presetNames.size())
-            ok &= expect(restored.presetName == presetNames[expectedDefaultIndex],
-                         "Default preset name mismatch after restore");
-    }
+    ok &= expect(restored.presetIndex == second.presetIndex, "Preset index did not round-trip with state");
+    ok &= expect(restored.presetName == second.presetName, "Preset name did not round-trip with state");
 
     juce::AudioBuffer<float> audioBlock(kNumChannels, kBlockSize);
     juce::MidiBuffer midi;

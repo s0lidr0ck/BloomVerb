@@ -4,21 +4,21 @@
 
 #include <vector>
 
-class BloomVerbAudioProcessorEditor::AnalogPlaceholderLookAndFeel final : public juce::LookAndFeel_V4
+class BloomVerbAudioProcessorEditor::ProductionLookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
-    AnalogPlaceholderLookAndFeel()
+    ProductionLookAndFeel()
     {
-        setColour(juce::Slider::textBoxTextColourId, juce::Colours::white);
-        setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff605448));
-        setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff1a1612));
-        setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff231d17));
-        setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff8f7a62));
-        setColour(juce::ComboBox::textColourId, juce::Colours::white);
-        setColour(juce::Label::textColourId, juce::Colours::white);
-        setColour(juce::TextButton::buttonColourId, juce::Colour(0xff3a2f23));
-        setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff7e633e));
-        setColour(juce::TextButton::textColourOffId, juce::Colour(0xffd6c6af));
+        setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xfff4ead8));
+        setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff6f5d4b));
+        setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff17120d));
+        setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff1d1712));
+        setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff7f6a55));
+        setColour(juce::ComboBox::textColourId, juce::Colour(0xfff8efdd));
+        setColour(juce::Label::textColourId, juce::Colour(0xfff8efdd));
+        setColour(juce::TextButton::buttonColourId, juce::Colour(0xff2f261d));
+        setColour(juce::TextButton::buttonOnColourId, juce::Colour(0xff8e6d42));
+        setColour(juce::TextButton::textColourOffId, juce::Colour(0xffd9c5a6));
         setColour(juce::TextButton::textColourOnId, juce::Colours::white);
     }
 
@@ -38,17 +38,17 @@ public:
         const auto centre = bounds.getCentre();
         const auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
 
-        juce::ColourGradient rimGrad(juce::Colour(0xff9a876e), centre.x, bounds.getY(),
-                                     juce::Colour(0xff4d4134), centre.x, bounds.getBottom(), false);
+        juce::ColourGradient rimGrad(juce::Colour(0xffb69a76), centre.x, bounds.getY(),
+                                     juce::Colour(0xff544332), centre.x, bounds.getBottom(), false);
         g.setGradientFill(rimGrad);
         g.fillEllipse(bounds);
 
-        g.setColour(juce::Colour(0xff1a1510));
-        g.fillEllipse(bounds.reduced(radius * 0.18f));
+        g.setColour(juce::Colour(0xff110d09));
+        g.fillEllipse(bounds.reduced(radius * 0.16f));
 
         const auto dial = bounds.reduced(radius * 0.28f);
-        juce::ColourGradient dialGrad(juce::Colour(0xff73614d), dial.getX(), dial.getY(),
-                                      juce::Colour(0xff2b241c), dial.getRight(), dial.getBottom(), true);
+        juce::ColourGradient dialGrad(juce::Colour(0xff7f6b53), dial.getX(), dial.getY(),
+                                      juce::Colour(0xff241d16), dial.getRight(), dial.getBottom(), true);
         g.setGradientFill(dialGrad);
         g.fillEllipse(dial);
 
@@ -56,10 +56,10 @@ public:
         const float pointerLength = radius * 0.58f;
         const float pointerThickness = 2.8f;
         pointer.addRoundedRectangle(-pointerThickness * 0.5f, -pointerLength, pointerThickness, pointerLength, 1.0f);
-        g.setColour(juce::Colour(0xfff2e0c5));
+        g.setColour(juce::Colour(0xfff7e5c8));
         g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centre.x, centre.y));
 
-        g.setColour(juce::Colour(0x66322211));
+        g.setColour(juce::Colour(0x8843301a));
         g.drawEllipse(bounds, 1.2f);
     }
 
@@ -76,11 +76,82 @@ public:
         else if (isMouseOverButton)
             base = base.brighter(0.12f);
 
-        g.setColour(base);
-        g.fillRoundedRectangle(bounds, 5.0f);
-        g.setColour(juce::Colour(0x88c8ab7f));
-        g.drawRoundedRectangle(bounds, 5.0f, 1.0f);
+        juce::ColourGradient gradient(base.brighter(0.14f), bounds.getCentreX(), bounds.getY(),
+                                      base.darker(0.22f), bounds.getCentreX(), bounds.getBottom(), false);
+        g.setGradientFill(gradient);
+        g.fillRoundedRectangle(bounds, 6.0f);
+        g.setColour(juce::Colour(0x88dec399));
+        g.drawRoundedRectangle(bounds, 6.0f, 1.0f);
     }
+};
+
+class BloomVerbAudioProcessorEditor::LevelMeter final : public juce::Component
+{
+public:
+    void setLevels(float newInputLevel, float newOutputLevel, float freezeAmount)
+    {
+        inputLevel = juce::jlimit(0.0f, 1.0f, newInputLevel);
+        outputLevel = juce::jlimit(0.0f, 1.0f, newOutputLevel);
+        freezeBlend = juce::jlimit(0.0f, 1.0f, freezeAmount);
+        repaint();
+    }
+
+    void paint(juce::Graphics& g) override
+    {
+        auto area = getLocalBounds().toFloat();
+        g.setColour(juce::Colour(0xff16110d));
+        g.fillRoundedRectangle(area, 8.0f);
+        g.setColour(juce::Colour(0xff7f6a55));
+        g.drawRoundedRectangle(area, 8.0f, 1.0f);
+
+        auto inner = area.reduced(12.0f, 10.0f);
+        auto title = inner.removeFromTop(18.0f);
+        g.setColour(juce::Colour(0xffd8c6a8));
+        g.setFont(juce::Font(juce::FontOptions(12.0f, juce::Font::bold)));
+        g.drawText("Signal", title.toNearestInt(), juce::Justification::centredLeft, false);
+
+        auto bars = inner.removeFromTop(inner.getHeight() - 20.0f);
+        const float barGap = 10.0f;
+        const float barWidth = (bars.getWidth() - barGap) * 0.5f;
+        auto inBar = juce::Rectangle<float>(bars.getX(), bars.getY(), barWidth, bars.getHeight());
+        auto outBar = juce::Rectangle<float>(bars.getX() + barWidth + barGap, bars.getY(), barWidth, bars.getHeight());
+
+        drawBar(g, inBar, inputLevel, "IN");
+        drawBar(g, outBar, outputLevel, "OUT");
+
+        auto footer = inner;
+        const juce::Colour freezeColour = juce::Colour(0xff8fd4ff).interpolatedWith(juce::Colour(0xff2b3a4c), 1.0f - freezeBlend);
+        g.setColour(freezeColour);
+        g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::plain)));
+        g.drawText(freezeBlend > 0.5f ? "Freeze Engaged" : "Freeze Ready",
+                   footer.toNearestInt(), juce::Justification::centredLeft, false);
+    }
+
+private:
+    static void drawBar(juce::Graphics& g, juce::Rectangle<float> bounds, float level, const juce::String& label)
+    {
+        g.setColour(juce::Colour(0xff0c0907));
+        g.fillRoundedRectangle(bounds, 5.0f);
+
+        auto fill = bounds;
+        fill.setY(bounds.getBottom() - bounds.getHeight() * level);
+        juce::ColourGradient gradient(juce::Colour(0xff3db78a), fill.getCentreX(), fill.getBottom(),
+                                      juce::Colour(0xfff0c36c), fill.getCentreX(), fill.getY(), false);
+        if (level > 0.82f)
+            gradient.addColour(0.0, juce::Colour(0xffd6524c));
+        g.setGradientFill(gradient);
+        g.fillRoundedRectangle(fill, 5.0f);
+
+        g.setColour(juce::Colour(0x66f4ead8));
+        g.drawRoundedRectangle(bounds, 5.0f, 1.0f);
+        g.setColour(juce::Colour(0xffd8c6a8));
+        g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+        g.drawText(label, bounds.removeFromBottom(16.0f).toNearestInt(), juce::Justification::centred, false);
+    }
+
+    float inputLevel = 0.0f;
+    float outputLevel = 0.0f;
+    float freezeBlend = 0.0f;
 };
 
 class BloomVerbAudioProcessorEditor::ParameterPage final : public juce::Component
@@ -203,21 +274,29 @@ private:
 
 BloomVerbAudioProcessorEditor::BloomVerbAudioProcessorEditor(BloomVerbAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p), apvts(p.getAPVTS()),
-      lookAndFeel(std::make_unique<AnalogPlaceholderLookAndFeel>())
+      lookAndFeel(std::make_unique<ProductionLookAndFeel>()),
+      levelMeter(std::make_unique<LevelMeter>())
 {
     setLookAndFeel(lookAndFeel.get());
     setSize(1120, 700);
+    setResizable(false, false);
 
     titleLabel.setText("BloomVerb", juce::dontSendNotification);
     titleLabel.setJustificationType(juce::Justification::centredLeft);
     titleLabel.setFont(juce::Font(juce::FontOptions(36.0f, juce::Font::bold)));
-    titleLabel.setColour(juce::Label::textColourId, juce::Colour(0xfff0ddbe));
+    titleLabel.setColour(juce::Label::textColourId, juce::Colour(0xfff7ead0));
     addAndMakeVisible(titleLabel);
 
-    subtitleLabel.setText("Character reverb instrument - placeholder hardware layout", juce::dontSendNotification);
+    subtitleLabel.setText("Character reverb instrument - production local build", juce::dontSendNotification);
     subtitleLabel.setJustificationType(juce::Justification::centredLeft);
-    subtitleLabel.setColour(juce::Label::textColourId, juce::Colour(0xffc8b596));
+    subtitleLabel.setColour(juce::Label::textColourId, juce::Colour(0xffcdb99d));
     addAndMakeVisible(subtitleLabel);
+
+    statusLabel.setText("FDN tail / freeze-safe / local test gate", juce::dontSendNotification);
+    statusLabel.setJustificationType(juce::Justification::centredRight);
+    statusLabel.setColour(juce::Label::textColourId, juce::Colour(0xff8fd4ff));
+    statusLabel.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::bold)));
+    addAndMakeVisible(statusLabel);
 
     setupPresetControls();
 
@@ -236,7 +315,9 @@ BloomVerbAudioProcessorEditor::BloomVerbAudioProcessorEditor(BloomVerbAudioProce
     setupTabButton(advancedTabButton, "ADVANCED", 2);
 
     setupPageControls();
+    addAndMakeVisible(*levelMeter);
     setActivePage(0);
+    startTimerHz(30);
 }
 
 void BloomVerbAudioProcessorEditor::setupPresetControls()
@@ -344,6 +425,7 @@ void BloomVerbAudioProcessorEditor::setupTabButton(juce::TextButton& button, con
 
 BloomVerbAudioProcessorEditor::~BloomVerbAudioProcessorEditor()
 {
+    stopTimer();
     setLookAndFeel(nullptr);
 }
 
@@ -368,24 +450,37 @@ void BloomVerbAudioProcessorEditor::refreshPageVisibility()
 
 void BloomVerbAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    juce::ColourGradient background(juce::Colour(0xff2a2017), 0.0f, 0.0f,
-                                    juce::Colour(0xff0f0b08), 0.0f, static_cast<float>(getHeight()), false);
+    juce::ColourGradient background(juce::Colour(0xff241b14), 0.0f, 0.0f,
+                                    juce::Colour(0xff080605), 0.0f, static_cast<float>(getHeight()), false);
     g.setGradientFill(background);
     g.fillAll();
 
     auto chassis = getLocalBounds().reduced(8).toFloat();
-    g.setColour(juce::Colour(0xff17110d));
+    g.setColour(juce::Colour(0xff120e0b));
     g.fillRoundedRectangle(chassis, 12.0f);
-    g.setColour(juce::Colour(0xff8f7a62));
+    g.setColour(juce::Colour(0xff8f795f));
     g.drawRoundedRectangle(chassis, 12.0f, 1.4f);
 
-    // Placeholder "rack screws" to imply hardware layout without image assets.
+    auto topPlate = chassis.reduced(20.0f, 18.0f).removeFromTop(88.0f);
+    juce::ColourGradient plate(juce::Colour(0xff34281d), topPlate.getX(), topPlate.getY(),
+                               juce::Colour(0xff17110d), topPlate.getRight(), topPlate.getBottom(), true);
+    g.setGradientFill(plate);
+    g.fillRoundedRectangle(topPlate, 10.0f);
+    g.setColour(juce::Colour(0x55ecd1a8));
+    g.drawRoundedRectangle(topPlate, 10.0f, 1.0f);
+
     g.setColour(juce::Colour(0xff6f5b45));
     constexpr float r = 5.0f;
     g.fillEllipse(chassis.getX() + 10.0f, chassis.getY() + 10.0f, r * 2.0f, r * 2.0f);
     g.fillEllipse(chassis.getRight() - 20.0f, chassis.getY() + 10.0f, r * 2.0f, r * 2.0f);
     g.fillEllipse(chassis.getX() + 10.0f, chassis.getBottom() - 20.0f, r * 2.0f, r * 2.0f);
     g.fillEllipse(chassis.getRight() - 20.0f, chassis.getBottom() - 20.0f, r * 2.0f, r * 2.0f);
+
+    auto footer = chassis.reduced(20.0f, 16.0f).removeFromBottom(26.0f);
+    g.setColour(juce::Colour(0xffb49875));
+    g.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::plain)));
+    g.drawText("Option A console-strip hybrid • fixed control layout • local validation ready",
+               footer.toNearestInt(), juce::Justification::centredLeft, false);
 }
 
 void BloomVerbAudioProcessorEditor::resized()
@@ -393,7 +488,7 @@ void BloomVerbAudioProcessorEditor::resized()
     auto area = getLocalBounds().reduced(18);
     auto header = area.removeFromTop(132);
 
-    auto titleArea = header.removeFromLeft(700);
+    auto titleArea = header.removeFromLeft(760);
     titleLabel.setBounds(titleArea.removeFromTop(44));
     subtitleLabel.setBounds(titleArea.removeFromTop(24));
 
@@ -402,6 +497,11 @@ void BloomVerbAudioProcessorEditor::resized()
     presetPrevButton.setBounds(presetRow.removeFromLeft(34));
     presetBox.setBounds(presetRow.removeFromLeft(210).reduced(4, 0));
     presetNextButton.setBounds(presetRow.removeFromLeft(34));
+
+    auto rightRail = header.removeFromRight(170).reduced(4, 2);
+    statusLabel.setBounds(rightRail.removeFromTop(24));
+    if (levelMeter != nullptr)
+        levelMeter->setBounds(rightRail.removeFromTop(92));
 
     auto controls = header.reduced(8, 8);
     auto typeArea = controls.removeFromTop(50);
@@ -424,4 +524,36 @@ void BloomVerbAudioProcessorEditor::resized()
         characterPage->setBounds(pageAreaBounds);
     if (advancedPage != nullptr)
         advancedPage->setBounds(pageAreaBounds);
+}
+
+void BloomVerbAudioProcessorEditor::timerCallback()
+{
+    const float inputLevel = processor.getInputMeterLevel();
+    const float outputLevel = processor.getOutputMeterLevel();
+    const float freezeAmount = processor.getFreezeVisualAmount();
+
+    if (levelMeter != nullptr)
+        levelMeter->setLevels(inputLevel, outputLevel, freezeAmount);
+
+    const auto presetCount = processor.getPresetNames().size();
+    const auto presetIndex = processor.getCurrentPresetIndex();
+    juce::String statusText;
+
+    if (freezeAmount > 0.5f)
+        statusText << "Freeze engaged";
+    else if (outputLevel > 0.85f)
+        statusText << "Output hot";
+    else if (inputLevel < 0.01f && outputLevel < 0.01f)
+        statusText << "Input silent";
+    else
+        statusText << "Freeze ready";
+
+    statusText << "  •  ";
+    if (presetCount > 0 && presetIndex >= 0)
+        statusText << "Preset " << (presetIndex + 1) << "/" << presetCount;
+    else
+        statusText << "No presets";
+
+    if (statusLabel.getText() != statusText)
+        statusLabel.setText(statusText, juce::dontSendNotification);
 }

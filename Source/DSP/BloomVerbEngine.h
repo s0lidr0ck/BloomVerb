@@ -1,6 +1,7 @@
 #pragma once
 
 #include <array>
+#include <memory>
 #include <vector>
 
 #include <juce_audio_basics/juce_audio_basics.h>
@@ -8,6 +9,10 @@
 
 namespace bloomverb
 {
+class FDNCore;
+class FreezeController;
+class RuntimeParameterSmoothers;
+
 struct RuntimeParameters
 {
     int type = 1;
@@ -44,6 +49,9 @@ struct RuntimeParameters
 class BloomVerbEngine
 {
 public:
+    BloomVerbEngine();
+    ~BloomVerbEngine();
+
     void prepare(double sampleRate, int maxBlockSize, int numChannels);
     void reset();
 
@@ -70,9 +78,11 @@ private:
 
     std::array<juce::dsp::StateVariableTPTFilter<float>, 2> lowCutFilters;
     std::array<juce::dsp::StateVariableTPTFilter<float>, 2> highCutFilters;
-    juce::dsp::Reverb reverb;
     juce::AudioBuffer<float> dryScratchBuffer;
     juce::AudioBuffer<float> wetScratchBuffer;
+    std::unique_ptr<FDNCore> fdnCore;
+    std::unique_ptr<FreezeController> freezeController;
+    std::unique_ptr<RuntimeParameterSmoothers> parameterSmoothers;
 
     float fastEnvelope = 0.0f;
     float slowEnvelope = 0.0f;
