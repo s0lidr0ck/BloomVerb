@@ -53,6 +53,21 @@ Artifacts:
 - Standalone: `build/BloomVerb_artefacts/Standalone/BloomVerb`
 - VST3: `build/BloomVerb_artefacts/VST3/BloomVerb.vst3`
 
+## Fast headless regression tests (ctest)
+
+The repository includes quick non-GUI regression checks that run without an audio device:
+
+- `BloomVerbEngineTests`: DSP smoke test (finite output/no crash under stressed parameter sets)
+- `BloomVerbStateTests`: parameter/state contract test (parameter IDs/defaults + APVTS round-trip)
+
+Configure, build tests, and run:
+
+```bash
+cmake -S . -B build -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build --target BloomVerbEngineTests BloomVerbStateTests -j4
+ctest --test-dir build --output-on-failure
+```
+
 ## Loop test environment (no DAW required)
 
 A dedicated test app is included so you can audition BloomVerb with a looping file:
