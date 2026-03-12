@@ -12,6 +12,7 @@ This repository now contains a JUCE-based BloomVerb plugin implementation with:
 - full APVTS target parameter set (essential + signature + advanced)
 - staged DSP engine (detectors, pre-delay, early reflections, diffusion stage, reverb tank, harmonic shaping, warp/dynamic behavior, width growth, tone filtering, wet/dry/output)
 - multi-page UI (Main / Character / Advanced) with live parameter attachments
+- preset browser controls (Prev/Next + selector) backed by factory preset banks
 - VST3 + Standalone build targets via CMake
 
 ## Build (Linux)
@@ -58,7 +59,9 @@ Artifacts:
 The repository includes quick non-GUI regression checks that run without an audio device:
 
 - `BloomVerbEngineTests`: DSP smoke test (finite output/no crash under stressed parameter sets)
+- `BloomVerbEngineInvarianceTests`: sample-rate/block-size invariance sanity checks
 - `BloomVerbStateTests`: parameter/state contract test (parameter IDs/defaults + APVTS round-trip)
+- `BloomVerbPresetRecallTests`: preset apply + state restore regression checks
 
 Configure, build tests, and run:
 

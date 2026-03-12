@@ -44,8 +44,14 @@ target_sources(BloomVerb
         Source/PluginEditor.h
         Source/Parameters/BloomVerbParameters.cpp
         Source/Parameters/BloomVerbParameters.h
+        Source/Presets/BloomVerbPreset.cpp
+        Source/Presets/BloomVerbPreset.h
+        Source/Presets/BloomVerbPresetBank.cpp
+        Source/Presets/BloomVerbPresetBank.h
         Source/DSP/BloomVerbEngine.cpp
         Source/DSP/BloomVerbEngine.h
+        Source/DSP/BloomVerbTypeVoicing.cpp
+        Source/DSP/BloomVerbTypeVoicing.h
 )
 
 target_compile_definitions(BloomVerb
@@ -76,6 +82,8 @@ target_sources(BloomVerbLoopTester
         Source/Tester/LoopTesterMain.cpp
         Source/DSP/BloomVerbEngine.cpp
         Source/DSP/BloomVerbEngine.h
+        Source/DSP/BloomVerbTypeVoicing.cpp
+        Source/DSP/BloomVerbTypeVoicing.h
 )
 
 target_compile_definitions(BloomVerbLoopTester
@@ -97,7 +105,10 @@ target_link_libraries(BloomVerbLoopTester
 if(BUILD_TESTING)
     set(BLOOMVERB_TEST_COMMON_SOURCES
         Source/DSP/BloomVerbEngine.cpp
+        Source/DSP/BloomVerbTypeVoicing.cpp
         Source/Parameters/BloomVerbParameters.cpp
+        Source/Presets/BloomVerbPreset.cpp
+        Source/Presets/BloomVerbPresetBank.cpp
     )
 
     function(bloomverb_add_test test_name test_source)
@@ -136,5 +147,25 @@ if(BUILD_TESTING)
     endfunction()
 
     bloomverb_add_test(BloomVerbEngineTests Tests/BloomVerbEngineTests.cpp)
+    bloomverb_add_test(BloomVerbEngineInvarianceTests Tests/BloomVerbEngineInvarianceTests.cpp)
     bloomverb_add_test(BloomVerbStateTests Tests/BloomVerbStateTests.cpp)
+    bloomverb_add_test(BloomVerbPresetRecallTests Tests/BloomVerbPresetRecallTests.cpp)
+
+    target_sources(BloomVerbPresetRecallTests
+        PRIVATE
+            Source/PluginProcessor.cpp
+            Source/PluginEditor.cpp
+    )
+
+    target_compile_definitions(BloomVerbPresetRecallTests
+        PRIVATE
+            JucePlugin_Name="BloomVerb"
+    )
+
+    target_link_libraries(BloomVerbPresetRecallTests
+        PRIVATE
+            juce::juce_audio_utils
+            juce::juce_gui_basics
+            juce::juce_gui_extra
+    )
 endif()

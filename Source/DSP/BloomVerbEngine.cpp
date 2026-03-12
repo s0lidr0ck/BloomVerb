@@ -1,4 +1,5 @@
 #include "BloomVerbEngine.h"
+#include "BloomVerbTypeVoicing.h"
 
 #include <cmath>
 
@@ -25,6 +26,11 @@ void BloomVerbEngine::prepare(double sampleRate, int maxBlockSize, int numChanne
         channel.assign(static_cast<size_t>(delayBufferSize), 0.0f);
     for (auto& channel : earlyDelayBuffer)
         channel.assign(static_cast<size_t>(delayBufferSize), 0.0f);
+
+    dryScratchBuffer.setSize(2, maxSamplesPerBlock, false, false, true);
+    wetScratchBuffer.setSize(2, maxSamplesPerBlock, false, false, true);
+    dryScratchBuffer.clear();
+    wetScratchBuffer.clear();
 
     juce::dsp::ProcessSpec spec;
     spec.sampleRate = sampleRateHz;
@@ -68,29 +74,14 @@ void BloomVerbEngine::reset()
     for (auto& channel : earlyDelayBuffer)
         std::fill(channel.begin(), channel.end(), 0.0f);
 
+    dryScratchBuffer.clear();
+    wetScratchBuffer.clear();
+
     for (auto& filter : lowCutFilters)
         filter.reset();
     for (auto& filter : highCutFilters)
         filter.reset();
     reverb.reset();
-}
-
-BloomVerbEngine::TypeProfile BloomVerbEngine::getTypeProfile(int type)
-{
-    switch (type)
-    {
-        case 0: return { 0.85f, -0.10f, 0.70f, 0.70f, 0.85f, 0.80f, -0.10f }; // Plate
-        case 1: return { 1.00f,  0.00f, 1.00f, 1.00f, 1.00f, 1.00f,  0.00f }; // Hall
-        case 2: return { 0.75f, -0.05f, 0.80f, 1.35f, 0.80f, 0.70f, -0.15f }; // Room
-        case 3: return { 1.35f,  0.10f, 1.30f, 0.65f, 1.40f, 1.20f,  0.10f }; // Cloud
-        case 4: return { 1.20f,  0.02f, 1.15f, 0.80f, 1.25f, 1.00f,  0.05f }; // Bloom
-        case 5: return { 1.00f, -0.05f, 0.95f, 0.90f, 1.10f, 0.90f,  0.35f }; // Grain
-        case 6: return { 0.90f, -0.02f, 0.85f, 1.20f, 0.95f, 0.90f,  0.00f }; // Chamber
-        case 7: return { 1.25f,  0.15f, 1.20f, 0.75f, 1.35f, 1.50f,  0.15f }; // Dream
-        default: break;
-    }
-
-    return {};
 }
 
 float BloomVerbEngine::saturate(float x, float amount)
@@ -119,8 +110,16 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
     if (numChannels < 1 || numSamples <= 0)
         return;
 
-    auto dry = buffer;
-    const auto profile = getTypeProfile(parameters.type);
+    if (numSamples > dryScratchBuffer.getNumSamples())
+    {
+        dryScratchBuffer.setSize(2, numSamples, false, false, true);
+        wetScratchBuffer.setSize(2, numSamples, false, false, true);
+    }
+
+    for (int ch = 0; ch < numChannels; ++ch)
+        dryScratchBuffer.copyFrom(ch, 0, buffer, ch, 0, numSamples);
+
+    const auto profile = getTypeVoicingProfile(parameters.type);
     const float targetDecayTailControl = mapDecaySecondsToTailControl(parameters.decaySeconds);
     const float decaySmoothCoeff = std::exp(-static_cast<float>(numSamples)
                                             / (static_cast<float>(sampleRateHz) * decaySmoothTimeSeconds));
@@ -139,8 +138,8 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
 
     for (int i = 0; i < numSamples; ++i)
     {
-        const float inL = dry.getSample(0, i);
-        const float inR = (numChannels > 1) ? dry.getSample(1, i) : inL;
+        const float inL = dryScratchBuffer.getSample(0, i);
+        const float inR = (numChannels > 1) ? dryScratchBuffer.getSample(1, i) : inL;
         const float amplitude = 0.5f * (std::abs(inL) + std::abs(inR));
 
         fastEnvelope = fastCoeff * fastEnvelope + (1.0f - fastCoeff) * amplitude;
@@ -162,11 +161,17 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
                                              static_cast<int>((parameters.preDelayMs * profile.preDelayScale * swellDelayScale * sampleRateHz) / 1000.0));
 
     const float earlyGain = juce::jlimit(0.0f, 1.0f, parameters.early * profile.earlyScale);
-    const float diffusionAmount = juce::jlimit(0.0f, 1.0f, parameters.diffusion + profile.textureBias * parameters.texture);
+    const float diffusionAmount = juce::jlimit(0.0f, 1.0f,
+                                               parameters.diffusion
+                                               + profile.textureBias * parameters.texture
+                                               + profile.diffusionBias);
     const float allpassA = juce::jlimit(0.0f, 0.82f, 0.08f + (diffusionAmount * 0.72f));
-
-    juce::AudioBuffer<float> wetInput(numChannels, numSamples);
-    wetInput.clear();
+    const float earlyTapBias = juce::jlimit(-1.0f, 1.0f, profile.earlyTapWeightBias);
+    const float tapAWeight = juce::jlimit(0.20f, 0.80f, 0.58f + earlyTapBias * 0.18f);
+    const float tapBWeight = juce::jlimit(0.10f, 0.60f, 0.31f - earlyTapBias * 0.04f);
+    const float tapCWeight = juce::jlimit(0.05f, 0.50f, 1.0f - tapAWeight - tapBWeight);
+    const float tapWeightNormaliser = 1.0f / juce::jmax(0.0001f, tapAWeight + tapBWeight + tapCWeight);
+    const float harmonicTypeScale = juce::jlimit(0.55f, 1.60f, 1.0f + profile.harmonicTilt * 0.45f);
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
@@ -178,13 +183,13 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
 
         const float sampleAllpassA = juce::jlimit(0.0f, 0.88f, allpassA + motionState * 0.16f);
         const float harmonicFeedAmount = juce::jlimit(0.0f, 1.0f,
-                                                      parameters.harmonic
+                                                      parameters.harmonic * harmonicTypeScale
                                                       * (0.28f + 0.48f * releaseState + 0.24f * std::abs(motionState)));
         const float textureBlend = juce::jlimit(0.0f, 1.0f, parameters.texture + motionState * 0.14f);
 
         for (int ch = 0; ch < numChannels; ++ch)
         {
-            const float inputSample = buffer.getSample(ch, sample);
+            const float inputSample = dryScratchBuffer.getSample(ch, sample);
 
             preDelayBuffer[static_cast<size_t>(ch)][static_cast<size_t>(preDelayWritePos)] = inputSample;
             const int preRead = (preDelayWritePos - preDelaySamples + delayBufferSize) % delayBufferSize;
@@ -195,9 +200,10 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
             const int tapB = (earlyDelayWritePos - static_cast<int>(0.013f * sampleRateHz) + delayBufferSize) % delayBufferSize;
             const int tapC = (earlyDelayWritePos - static_cast<int>(0.023f * sampleRateHz) + delayBufferSize) % delayBufferSize;
 
-            const float earlyRef = 0.58f * earlyDelayBuffer[static_cast<size_t>(ch)][static_cast<size_t>(tapA)]
-                                 + 0.31f * earlyDelayBuffer[static_cast<size_t>(ch)][static_cast<size_t>(tapB)]
-                                 + 0.21f * earlyDelayBuffer[static_cast<size_t>(ch)][static_cast<size_t>(tapC)];
+            const float earlyRef = (tapAWeight * earlyDelayBuffer[static_cast<size_t>(ch)][static_cast<size_t>(tapA)]
+                                  + tapBWeight * earlyDelayBuffer[static_cast<size_t>(ch)][static_cast<size_t>(tapB)]
+                                  + tapCWeight * earlyDelayBuffer[static_cast<size_t>(ch)][static_cast<size_t>(tapC)])
+                                 * tapWeightNormaliser;
 
             const float transientOpen = juce::jlimit(0.0f, 1.0f, (fastEnvelope - slowEnvelope) * 8.0f + 0.2f);
             const float swellSuppress = juce::jlimit(0.0f, 1.0f, 1.0f - parameters.swell * transientOpen * 0.9f);
@@ -215,7 +221,7 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
 
             const float recircColour = harmonicRecircState[static_cast<size_t>(ch)] * harmonicFeedAmount * 0.30f;
             const float textured = juce::jmap(textureBlend, shapedFeed, y + recircColour);
-            wetInput.setSample(ch, sample, textured);
+            wetScratchBuffer.setSample(ch, sample, textured);
         }
 
         preDelayWritePos = (preDelayWritePos + 1) % delayBufferSize;
@@ -232,7 +238,9 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
     reverbParams.freezeMode = parameters.freeze ? 1.0f : 0.0f;
     reverb.setParameters(reverbParams);
 
-    juce::dsp::AudioBlock<float> wetBlock(wetInput);
+    auto wetBlock = juce::dsp::AudioBlock<float>(wetScratchBuffer)
+                        .getSubsetChannelBlock(0, static_cast<size_t>(numChannels))
+                        .getSubBlock(0, static_cast<size_t>(numSamples));
     juce::dsp::ProcessContextReplacing<float> wetContext(wetBlock);
     reverb.process(wetContext);
 
@@ -249,7 +257,8 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
     const float bloom = juce::jlimit(0.0f, 1.0f, parameters.bloomAmount * releaseState);
     const float duck = juce::jlimit(0.0f, 0.92f, fastEnvelope * parameters.dynamic * parameters.duckAmount * 1.4f);
     const float warpAmount = juce::jlimit(0.0f, 1.0f, parameters.warp);
-    const float warpGain = juce::jlimit(0.55f, 1.8f, 1.0f + warpAmount * (releaseState - 0.25f) * 0.45f);
+    const float warpTypeScale = juce::jlimit(0.65f, 1.75f, 1.0f + profile.warpTendency * 0.55f);
+    const float warpGain = juce::jlimit(0.55f, 1.8f, 1.0f + warpAmount * warpTypeScale * (releaseState - 0.25f) * 0.45f);
     const float transientOpen = juce::jlimit(0.0f, 1.0f, (fastEnvelope - slowEnvelope) * 8.0f + 0.2f);
     const float transientBlend = juce::jlimit(0.0f, 1.0f, parameters.transientPreserve * transientOpen);
     const float tailWetContour = parameters.freeze ? 1.0f : decayWetContour;
@@ -261,8 +270,8 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
 
     for (int sample = 0; sample < numSamples; ++sample)
     {
-        float wetL = wetInput.getSample(0, sample);
-        float wetR = (numChannels > 1) ? wetInput.getSample(1, sample) : wetL;
+        float wetL = wetScratchBuffer.getSample(0, sample);
+        float wetR = (numChannels > 1) ? wetScratchBuffer.getSample(1, sample) : wetL;
 
         wetL = saturate(wetL, outputHarmonic);
         wetR = saturate(wetR, outputHarmonic);
@@ -281,8 +290,8 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
                                                  0.20f + 0.56f * releaseState + (0.35f - tailEnergy) * 0.90f);
         warpContourState += (contourTarget - warpContourState) * warpContourSmoothCoeff;
 
-        const float densityAmount = warpAmount * (1.0f - warpContourState) * 0.24f;
-        const float brightnessTilt = 1.0f + warpAmount * (warpContourState - 0.5f) * 0.50f;
+        const float densityAmount = warpAmount * warpTypeScale * (1.0f - warpContourState) * 0.24f;
+        const float brightnessTilt = 1.0f + warpAmount * warpTypeScale * (warpContourState - 0.5f) * 0.50f;
 
         warpTailState[0] = warpTailState[0] * (0.93f + 0.04f * warpContourState) + wetL * (0.07f - 0.03f * warpContourState);
         wetL = wetL * brightnessTilt + warpTailState[0] * densityAmount;
@@ -300,10 +309,10 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
         wetL = mid + side;
         wetR = mid - side;
 
-        const float warpEnergyTrend = 1.0f + warpAmount * (warpContourState - 0.5f) * 0.30f;
+        const float warpEnergyTrend = 1.0f + warpAmount * warpTypeScale * (warpContourState - 0.5f) * 0.30f;
         const float wetGain = wetGainBase * warpEnergyTrend;
-        const float outL = (dry.getSample(0, sample) * dryMix + wetL * wetMix * wetGain) * outputGain;
-        const float outR = (dry.getSample(numChannels > 1 ? 1 : 0, sample) * dryMix + wetR * wetMix * wetGain) * outputGain;
+        const float outL = (dryScratchBuffer.getSample(0, sample) * dryMix + wetL * wetMix * wetGain) * outputGain;
+        const float outR = (dryScratchBuffer.getSample(numChannels > 1 ? 1 : 0, sample) * dryMix + wetR * wetMix * wetGain) * outputGain;
 
         buffer.setSample(0, sample, outL);
         if (numChannels > 1)

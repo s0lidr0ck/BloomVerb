@@ -18,6 +18,8 @@ private:
     class ParameterPage;
     class AnalogPlaceholderLookAndFeel;
 
+    void setupPresetControls();
+    void refreshPresetSelection();
     void setupPageControls();
     void setupTabButton(juce::TextButton& button, const juce::String& text, int pageIndex);
     void setActivePage(int pageIndex);
@@ -29,6 +31,12 @@ private:
 
     juce::Label titleLabel;
     juce::Label subtitleLabel;
+
+    juce::Label presetLabel;
+    juce::ComboBox presetBox;
+    juce::TextButton presetPrevButton;
+    juce::TextButton presetNextButton;
+    bool suppressPresetBoxChange = false;
 
     juce::ComboBox typeBox;
     juce::Label typeLabel;

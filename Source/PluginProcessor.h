@@ -4,6 +4,9 @@
 
 #include "DSP/BloomVerbEngine.h"
 #include "Parameters/BloomVerbParameters.h"
+#include "Presets/BloomVerbPreset.h"
+
+#include <atomic>
 
 class BloomVerbAudioProcessor final : public juce::AudioProcessor
 {
@@ -39,11 +42,20 @@ public:
     juce::AudioProcessorValueTreeState& getAPVTS() noexcept { return apvts; }
     const juce::AudioProcessorValueTreeState& getAPVTS() const noexcept { return apvts; }
 
+    const juce::StringArray& getPresetNames() const noexcept;
+    int getCurrentPresetIndex() const noexcept;
+    void applyPresetByIndex(int presetIndex);
+    void applyNextPreset();
+    void applyPreviousPreset();
+
 private:
     bloomverb::RuntimeParameters readRuntimeParameters() const;
+    void applyPresetInternal(const bloomverb::presets::BloomVerbPreset& preset);
 
     juce::AudioProcessorValueTreeState apvts;
     bloomverb::BloomVerbEngine engine;
+    juce::StringArray presetNames;
+    std::atomic<int> currentPresetIndex { 0 };
 
     JUCE_DECLARE_NON_COPYABLE_WITH_LEAK_DETECTOR(BloomVerbAudioProcessor)
 };
