@@ -9,10 +9,13 @@ set(CMAKE_CXX_EXTENSIONS OFF)
 include(FetchContent)
 include(CTest)
 
+set(BLOOMVERB_JUCE_GIT_TAG 29396c22c93392d6738e021b83196283d6e4d850 CACHE STRING
+    "Pinned JUCE commit (JUCE 8.0.12)")
+
 FetchContent_Declare(
     juce
     GIT_REPOSITORY https://github.com/juce-framework/JUCE.git
-    GIT_TAG 29396c22c93392d6738e021b83196283d6e4d850 # JUCE 8.0.12
+    GIT_TAG ${BLOOMVERB_JUCE_GIT_TAG}
     GIT_SHALLOW TRUE
 )
 
@@ -98,42 +101,38 @@ if(BUILD_TESTING)
     )
 
     function(bloomverb_add_test test_name test_source)
-        if(EXISTS "${CMAKE_CURRENT_SOURCE_DIR}/${test_source}")
-            add_executable(${test_name}
-                ${test_source}
-                ${BLOOMVERB_TEST_COMMON_SOURCES}
-            )
+        add_executable(${test_name}
+            ${test_source}
+            ${BLOOMVERB_TEST_COMMON_SOURCES}
+        )
 
-            target_include_directories(${test_name}
-                PRIVATE
-                    ${CMAKE_CURRENT_SOURCE_DIR}
-                    ${CMAKE_CURRENT_SOURCE_DIR}/Source
-            )
+        target_include_directories(${test_name}
+            PRIVATE
+                ${CMAKE_CURRENT_SOURCE_DIR}
+                ${CMAKE_CURRENT_SOURCE_DIR}/Source
+        )
 
-            target_compile_definitions(${test_name}
-                PRIVATE
-                    JUCE_WEB_BROWSER=0
-                    JUCE_USE_CURL=0
-                    JUCE_VST3_CAN_REPLACE_VST2=0
-            )
+        target_compile_definitions(${test_name}
+            PRIVATE
+                JUCE_WEB_BROWSER=0
+                JUCE_USE_CURL=0
+                JUCE_VST3_CAN_REPLACE_VST2=0
+        )
 
-            target_link_libraries(${test_name}
-                PRIVATE
-                    juce::juce_audio_basics
-                    juce::juce_audio_processors
-                    juce::juce_dsp
-                    juce::juce_events
-                    juce::juce_data_structures
-                    juce::juce_core
-                PUBLIC
-                    juce::juce_recommended_config_flags
-                    juce::juce_recommended_warning_flags
-            )
+        target_link_libraries(${test_name}
+            PRIVATE
+                juce::juce_audio_basics
+                juce::juce_audio_processors
+                juce::juce_dsp
+                juce::juce_events
+                juce::juce_data_structures
+                juce::juce_core
+            PUBLIC
+                juce::juce_recommended_config_flags
+                juce::juce_recommended_warning_flags
+        )
 
-            add_test(NAME ${test_name} COMMAND ${test_name})
-        else()
-            message(STATUS "Skipping ${test_name}: missing ${test_source}")
-        endif()
+        add_test(NAME ${test_name} COMMAND ${test_name})
     endfunction()
 
     bloomverb_add_test(BloomVerbEngineTests Tests/BloomVerbEngineTests.cpp)
