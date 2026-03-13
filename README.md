@@ -4,6 +4,7 @@ Implementation spec and phased execution blueprint:
 
 - [`BLOOMVERB_IMPLEMENTATION_SPEC.md`](./BLOOMVERB_IMPLEMENTATION_SPEC.md)
 - [`GUI_DIRECTION_OPTIONS.md`](./GUI_DIRECTION_OPTIONS.md)
+- [`docs/UI_ASSET_SPEC.md`](./docs/UI_ASSET_SPEC.md)
 - [`DEVELOPMENT_CHECKLIST.md`](./DEVELOPMENT_CHECKLIST.md)
 
 ## Current implementation status
