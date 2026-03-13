@@ -17,6 +17,8 @@ fi
 
 PACKAGES=(
   build-essential
+  gcc
+  g++
   cmake
   pkg-config
   libasound2-dev
@@ -40,7 +42,16 @@ echo "Installing BloomVerb Linux build dependencies..."
 $APT_PREFIX apt-get update
 $APT_PREFIX apt-get install -y "${PACKAGES[@]}"
 
+if command -v g++ >/dev/null 2>&1; then
+  GXX_MAJOR="$(g++ -dumpfullversion -dumpversion | cut -d. -f1)"
+  LIBSTDCPP_DEV_PACKAGE="libstdc++-${GXX_MAJOR}-dev"
+  if apt-cache show "${LIBSTDCPP_DEV_PACKAGE}" >/dev/null 2>&1; then
+    echo "Installing ${LIBSTDCPP_DEV_PACKAGE} for reliable C++ linking..."
+    $APT_PREFIX apt-get install -y "${LIBSTDCPP_DEV_PACKAGE}"
+  fi
+fi
+
 echo
 echo "Environment setup complete."
 echo "Build command:"
-echo "cmake -S . -B build -DCMAKE_C_COMPILER=/usr/bin/gcc -DCMAKE_CXX_COMPILER=/usr/bin/g++ && cmake --build build -j4"
+echo "cmake --preset linux-release && cmake --build --preset linux-release-build"
