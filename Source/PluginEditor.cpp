@@ -2,6 +2,7 @@
 
 #include "Parameters/BloomVerbParameters.h"
 
+#include <array>
 #include <vector>
 
 namespace
@@ -14,6 +15,9 @@ const auto cyanAccent = juce::Colour(0xff77c6d8);
 const auto mintAccent = juce::Colour(0xff82c4a5);
 const auto redAccent = juce::Colour(0xffc06d63);
 const auto screenAccent = juce::Colour(0xff37a7ca);
+const auto stripCool = juce::Colour(0xffa8b6bc);
+const auto stripWarm = juce::Colour(0xffc0b39d);
+const auto stripNeutral = juce::Colour(0xff9ca3ac);
 
 void drawScrews(juce::Graphics& g, juce::Rectangle<float> area)
 {
@@ -54,9 +58,9 @@ class BloomVerbAudioProcessorEditor::ProductionLookAndFeel final : public juce::
 public:
     ProductionLookAndFeel()
     {
-        setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xfff3ecde));
-        setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff655748));
-        setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff1b1d21));
+        setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xfff6eee0));
+        setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff6a6258));
+        setColour(juce::Slider::textBoxBackgroundColourId, juce::Colour(0xff1a1c1f));
         setColour(juce::ComboBox::backgroundColourId, juce::Colour(0xff191b1f));
         setColour(juce::ComboBox::outlineColourId, juce::Colour(0xff5d5246));
         setColour(juce::ComboBox::textColourId, juce::Colour(0xffefe5d6));
@@ -137,6 +141,57 @@ public:
 
         g.setColour(juce::Colour(0x995e5347));
         g.drawEllipse(bounds, 1.0f);
+    }
+
+    void drawLinearSlider(juce::Graphics& g,
+                          int x,
+                          int y,
+                          int width,
+                          int height,
+                          float sliderPos,
+                          float,
+                          float,
+                          const juce::Slider::SliderStyle style,
+                          juce::Slider& slider) override
+    {
+        if (style != juce::Slider::LinearVertical && style != juce::Slider::LinearBarVertical)
+        {
+            LookAndFeel_V4::drawLinearSlider(g, x, y, width, height, sliderPos, 0.0f, 0.0f, style, slider);
+            return;
+        }
+
+        auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
+                                             static_cast<float>(width), static_cast<float>(height)).reduced(4.0f, 2.0f);
+        drawPlate(g, bounds, juce::Colour(0xff17191c), 7.0f);
+
+        auto track = bounds.reduced(bounds.getWidth() * 0.33f, 12.0f);
+        track.setX(bounds.getCentreX() - track.getWidth() * 0.5f);
+        drawPlate(g, track, juce::Colour(0xff0f1215), 4.0f);
+
+        for (int i = 0; i < 9; ++i)
+        {
+            const float amount = static_cast<float>(i) / 8.0f;
+            const float markY = juce::jmap(amount, 0.0f, 1.0f, track.getBottom(), track.getY());
+            g.setColour(juce::Colour(0x557f8d97));
+            g.drawLine(track.getRight() + 4.0f, markY, bounds.getRight() - 3.0f, markY, i % 2 == 0 ? 1.1f : 0.8f);
+        }
+
+        const float clampedPos = juce::jlimit(track.getY(), track.getBottom(), sliderPos);
+        auto fill = track;
+        fill.setY(clampedPos);
+        juce::ColourGradient fillGrad(juce::Colour(0xff2ca6c3), fill.getCentreX(), fill.getBottom(),
+                                      juce::Colour(0xffd0ad76), fill.getCentreX(), fill.getY(), false);
+        g.setGradientFill(fillGrad);
+        g.fillRoundedRectangle(fill, 3.0f);
+
+        auto thumb = juce::Rectangle<float>(bounds.getWidth() - 14.0f, 16.0f)
+                         .withCentre({ bounds.getCentreX(), clampedPos });
+        juce::ColourGradient thumbFill(juce::Colour(0xffddd4c8), thumb.getCentreX(), thumb.getY(),
+                                       juce::Colour(0xff81786d), thumb.getCentreX(), thumb.getBottom(), false);
+        g.setGradientFill(thumbFill);
+        g.fillRoundedRectangle(thumb, 3.0f);
+        g.setColour(juce::Colour(0xbb2b2520));
+        g.drawRoundedRectangle(thumb, 3.0f, 0.9f);
     }
 
     void drawButtonBackground(juce::Graphics& g,
@@ -455,6 +510,9 @@ public:
                     juce::Colour accentIn)
         : apvts(state), title(std::move(titleText)), rows(rowsIn), columns(columnsIn), accent(accentIn)
     {
+        moduleTint = accent.interpolatedWith(juce::Colour(0xffc8c0b5), 0.78f)
+                         .withMultipliedSaturation(0.34f)
+                         .withMultipliedBrightness(0.82f);
         setOpaque(true);
     }
 
@@ -467,7 +525,7 @@ public:
         auto control = std::make_unique<SliderControl>();
         control->label.setText(name, juce::dontSendNotification);
         control->label.setJustificationType(juce::Justification::centred);
-        control->label.setColour(juce::Label::textColourId, warmGrey);
+        control->label.setColour(juce::Label::textColourId, juce::Colour(0xfff1e8d7));
         control->label.setFont(juce::Font(juce::FontOptions(11.5f, juce::Font::bold)));
         control->slider.setSliderStyle(juce::Slider::RotaryHorizontalVerticalDrag);
         control->slider.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 58, 16);
@@ -501,25 +559,25 @@ public:
     void paint(juce::Graphics& g) override
     {
         auto area = getLocalBounds().toFloat().reduced(2.0f);
-        drawPlate(g, area, juce::Colour(0xff181614), 13.0f);
+        drawPlate(g, area, moduleTint, 11.0f);
         drawScrews(g, area);
 
-        auto nameplate = area.reduced(10.0f, 10.0f).removeFromTop(24.0f).removeFromLeft(102.0f);
-        drawPlate(g, nameplate, juce::Colour(0xff2b2723), 5.0f);
-        g.setColour(warmGrey);
+        auto nameplate = area.reduced(8.0f, 8.0f).removeFromTop(24.0f);
+        drawPlate(g, nameplate, juce::Colour(0xff2b2824), 5.0f);
+        g.setColour(juce::Colour(0xfff3e6cf));
         g.setFont(juce::Font(juce::FontOptions(11.5f, juce::Font::bold)));
         g.drawText(title, nameplate.toNearestInt(), juce::Justification::centred, false);
 
-        auto accentLine = area.reduced(12.0f, 12.0f).removeFromTop(2.0f).withWidth(area.getWidth() - 24.0f);
-        accentLine.setY(nameplate.getBottom() + 7.0f);
+        auto accentLine = area.reduced(10.0f, 10.0f).removeFromTop(2.0f).withWidth(area.getWidth() - 20.0f);
+        accentLine.setY(nameplate.getBottom() + 6.0f);
         g.setColour(accent.withAlpha(0.75f));
         g.fillRoundedRectangle(accentLine, 1.2f);
     }
 
     void resized() override
     {
-        auto area = getLocalBounds().reduced(12, 10);
-        area.removeFromTop(34);
+        auto area = getLocalBounds().reduced(10, 10);
+        area.removeFromTop(33);
 
         const int safeRows = juce::jmax(1, rows);
         const int safeColumns = juce::jmax(1, columns);
@@ -531,9 +589,9 @@ public:
             auto cell = juce::Rectangle<int>(area.getX() + knob->column * cellWidth,
                                              area.getY() + knob->row * cellHeight,
                                              cellWidth,
-                                             cellHeight).reduced(3, 1);
-            auto labelArea = cell.removeFromTop(14);
-            const int knobSize = juce::jlimit(70, 108, juce::jmin(cell.getWidth() - 4, cell.getHeight() - 8));
+                                             cellHeight).reduced(3, 2);
+            auto labelArea = cell.removeFromTop(15);
+            const int knobSize = juce::jlimit(56, 92, juce::jmin(cell.getWidth() - 4, cell.getHeight() - 8));
             auto knobArea = juce::Rectangle<int>(knobSize, knobSize).withCentre(cell.getCentre());
             knobArea.setY(labelArea.getBottom() + juce::jmax(0, (cell.getHeight() - knobSize) / 2));
             knob->label.setBounds(labelArea);
@@ -546,7 +604,7 @@ public:
                                              area.getY() + toggle->row * cellHeight,
                                              cellWidth,
                                              cellHeight).reduced(4, 8);
-            toggle->button.setBounds(cell.withSizeKeepingCentre(juce::jmin(170, cell.getWidth()), 32));
+            toggle->button.setBounds(cell.withSizeKeepingCentre(juce::jmin(150, cell.getWidth()), 30));
         }
     }
 
@@ -573,6 +631,7 @@ private:
     int rows = 1;
     int columns = 1;
     juce::Colour accent;
+    juce::Colour moduleTint;
     std::vector<std::unique_ptr<SliderControl>> sliders;
     std::vector<std::unique_ptr<ToggleControl>> toggles;
 };
@@ -584,7 +643,7 @@ BloomVerbAudioProcessorEditor::BloomVerbAudioProcessorEditor(BloomVerbAudioProce
       displayPanel(std::make_unique<DisplayPanel>(apvts))
 {
     setLookAndFeel(lookAndFeel.get());
-    setSize(1280, 820);
+    setSize(1480, 860);
     setResizable(false, false);
 
     titleLabel.setText("BloomVerb", juce::dontSendNotification);
@@ -593,7 +652,7 @@ BloomVerbAudioProcessorEditor::BloomVerbAudioProcessorEditor(BloomVerbAudioProce
     titleLabel.setColour(juce::Label::textColourId, juce::Colour(0xfff2e4cc));
     addAndMakeVisible(titleLabel);
 
-    subtitleLabel.setText("space / bloom / motion", juce::dontSendNotification);
+    subtitleLabel.setText("console scaffold / assetless placeholder", juce::dontSendNotification);
     subtitleLabel.setJustificationType(juce::Justification::centredLeft);
     subtitleLabel.setColour(juce::Label::textColourId, juce::Colour(0xffb8afa3));
     subtitleLabel.setFont(juce::Font(juce::FontOptions(13.0f, juce::Font::plain)));
@@ -616,6 +675,21 @@ BloomVerbAudioProcessorEditor::BloomVerbAudioProcessorEditor(BloomVerbAudioProce
     typeAttachment = std::make_unique<juce::AudioProcessorValueTreeState::ComboBoxAttachment>(
         apvts, bloomverb::params::IDs::type, typeBox);
     addAndMakeVisible(typeBox);
+
+    outputFaderLabel.setText("Output", juce::dontSendNotification);
+    outputFaderLabel.setJustificationType(juce::Justification::centred);
+    outputFaderLabel.setColour(juce::Label::textColourId, juce::Colour(0xfff0e1c7));
+    outputFaderLabel.setFont(juce::Font(juce::FontOptions(11.0f, juce::Font::bold)));
+    addAndMakeVisible(outputFaderLabel);
+
+    outputFader.setSliderStyle(juce::Slider::LinearVertical);
+    outputFader.setTextBoxStyle(juce::Slider::TextBoxBelow, false, 58, 16);
+    outputFader.setPopupDisplayEnabled(true, false, this);
+    outputFader.setColour(juce::Slider::trackColourId, juce::Colour(0xff8fcde0));
+    outputFader.setColour(juce::Slider::thumbColourId, juce::Colour(0xffd9ccb8));
+    outputFaderAttachment = std::make_unique<juce::AudioProcessorValueTreeState::SliderAttachment>(
+        apvts, bloomverb::params::IDs::outputDb, outputFader);
+    addAndMakeVisible(outputFader);
 
 #if JucePlugin_Build_Standalone
     loadFileButton.setButtonText("Load");
@@ -733,44 +807,43 @@ void BloomVerbAudioProcessorEditor::refreshPresetSelection()
 
 void BloomVerbAudioProcessorEditor::setupModules()
 {
-    spaceModule = std::make_unique<ParameterModule>(apvts, "Space", 2, 3, brass);
+    spaceModule = std::make_unique<ParameterModule>(apvts, "Space", 3, 2, stripWarm);
     spaceModule->addKnob(bloomverb::params::IDs::size, "Size", 0, 0, brass);
     spaceModule->addKnob(bloomverb::params::IDs::decaySeconds, "Decay", 0, 1, juce::Colour(0xff9aa7bf));
-    spaceModule->addKnob(bloomverb::params::IDs::preDelayMs, "PreDelay", 0, 2, juce::Colour(0xff88acba));
-    spaceModule->addKnob(bloomverb::params::IDs::mix, "Mix", 1, 0, redAccent);
-    spaceModule->addKnob(bloomverb::params::IDs::distance, "Distance", 1, 1, juce::Colour(0xff9ba38a));
+    spaceModule->addKnob(bloomverb::params::IDs::preDelayMs, "PreDelay", 1, 0, juce::Colour(0xff88acba));
+    spaceModule->addKnob(bloomverb::params::IDs::mix, "Mix", 1, 1, redAccent);
+    spaceModule->addKnob(bloomverb::params::IDs::distance, "Distance", 2, 0, juce::Colour(0xff9ba38a));
     addAndMakeVisible(*spaceModule);
 
-    bloomModule = std::make_unique<ParameterModule>(apvts, "Bloom", 2, 2, cyanAccent);
+    bloomModule = std::make_unique<ParameterModule>(apvts, "Bloom", 4, 1, stripCool);
     bloomModule->addKnob(bloomverb::params::IDs::motion, "Motion", 0, 0, cyanAccent);
-    bloomModule->addKnob(bloomverb::params::IDs::texture, "Texture", 0, 1, mintAccent);
-    bloomModule->addKnob(bloomverb::params::IDs::swell, "Swell", 1, 0, juce::Colour(0xff7cb2cf));
-    bloomModule->addKnob(bloomverb::params::IDs::bloomAmount, "Bloom", 1, 1, redAccent);
+    bloomModule->addKnob(bloomverb::params::IDs::texture, "Texture", 1, 0, mintAccent);
+    bloomModule->addKnob(bloomverb::params::IDs::swell, "Swell", 2, 0, juce::Colour(0xff7cb2cf));
+    bloomModule->addKnob(bloomverb::params::IDs::bloomAmount, "Bloom", 3, 0, redAccent);
     addAndMakeVisible(*bloomModule);
 
-    characterModule = std::make_unique<ParameterModule>(apvts, "Character", 2, 3, mintAccent);
+    characterModule = std::make_unique<ParameterModule>(apvts, "Character", 3, 2, stripNeutral);
     characterModule->addKnob(bloomverb::params::IDs::dynamic, "Dynamic", 0, 0, juce::Colour(0xff95bb9f));
     characterModule->addKnob(bloomverb::params::IDs::harmonic, "Harmonic", 0, 1, juce::Colour(0xff8db4c0));
-    characterModule->addKnob(bloomverb::params::IDs::warp, "Warp", 0, 2, juce::Colour(0xffb88d78));
-    characterModule->addKnob(bloomverb::params::IDs::damping, "Damping", 1, 0, juce::Colour(0xff8aa38f));
-    characterModule->addKnob(bloomverb::params::IDs::width, "Width", 1, 1, cyanAccent);
-    characterModule->addKnob(bloomverb::params::IDs::early, "Early", 1, 2, juce::Colour(0xffb69872));
+    characterModule->addKnob(bloomverb::params::IDs::warp, "Warp", 1, 0, juce::Colour(0xffb88d78));
+    characterModule->addKnob(bloomverb::params::IDs::damping, "Damping", 1, 1, juce::Colour(0xff8aa38f));
+    characterModule->addKnob(bloomverb::params::IDs::width, "Width", 2, 0, cyanAccent);
+    characterModule->addKnob(bloomverb::params::IDs::early, "Early", 2, 1, juce::Colour(0xffb69872));
     addAndMakeVisible(*characterModule);
 
-    sculptModule = std::make_unique<ParameterModule>(apvts, "Tone / Filters", 2, 2, juce::Colour(0xff9aa2b8));
+    sculptModule = std::make_unique<ParameterModule>(apvts, "Tone / Filters", 4, 1, stripCool);
     sculptModule->addKnob(bloomverb::params::IDs::diffusion, "Diffusion", 0, 0, juce::Colour(0xff9ca3b8));
-    sculptModule->addKnob(bloomverb::params::IDs::tone, "Tone", 0, 1, juce::Colour(0xffc7b4a1));
-    sculptModule->addKnob(bloomverb::params::IDs::lowCutHz, "Low Cut", 1, 0, juce::Colour(0xff8ca3ac));
-    sculptModule->addKnob(bloomverb::params::IDs::highCutHz, "High Cut", 1, 1, juce::Colour(0xff95afbf));
+    sculptModule->addKnob(bloomverb::params::IDs::tone, "Tone", 1, 0, juce::Colour(0xffc7b4a1));
+    sculptModule->addKnob(bloomverb::params::IDs::lowCutHz, "Low Cut", 2, 0, juce::Colour(0xff8ca3ac));
+    sculptModule->addKnob(bloomverb::params::IDs::highCutHz, "High Cut", 3, 0, juce::Colour(0xff95afbf));
     addAndMakeVisible(*sculptModule);
 
-    outputModule = std::make_unique<ParameterModule>(apvts, "Mod / Output", 2, 3, brass);
+    outputModule = std::make_unique<ParameterModule>(apvts, "Mod / Utility", 3, 2, stripWarm);
     outputModule->addKnob(bloomverb::params::IDs::modRateHz, "Mod Rate", 0, 0, juce::Colour(0xff87aec0));
     outputModule->addKnob(bloomverb::params::IDs::modDepth, "Mod Depth", 0, 1, juce::Colour(0xff75b5c6));
-    outputModule->addKnob(bloomverb::params::IDs::duckAmount, "Duck", 0, 2, juce::Colour(0xffb68a77));
-    outputModule->addKnob(bloomverb::params::IDs::transientPreserve, "Transient", 1, 0, juce::Colour(0xff8ab091));
-    outputModule->addKnob(bloomverb::params::IDs::outputDb, "Output", 1, 1, juce::Colour(0xff9caed0));
-    outputModule->addToggle(bloomverb::params::IDs::freeze, "Freeze Hold", 1, 2);
+    outputModule->addKnob(bloomverb::params::IDs::duckAmount, "Duck", 1, 0, juce::Colour(0xffb68a77));
+    outputModule->addKnob(bloomverb::params::IDs::transientPreserve, "Transient", 1, 1, juce::Colour(0xff8ab091));
+    outputModule->addToggle(bloomverb::params::IDs::freeze, "Freeze Hold", 2, 0);
     addAndMakeVisible(*outputModule);
 }
 
@@ -810,36 +883,51 @@ void BloomVerbAudioProcessorEditor::paint(juce::Graphics& g)
     drawScrews(g, chassis);
 
     auto inner = chassis.reduced(16.0f, 16.0f);
-    auto topStrip = inner.removeFromTop(126.0f);
+    auto topStrip = inner.removeFromTop(118.0f);
     drawPlate(g, topStrip, juce::Colour(0xff211d18), 14.0f);
 
-    auto contentBed = inner;
-    drawPlate(g, contentBed, juce::Colour(0xff120f0d), 14.0f);
+    auto contentBed = inner.reduced(0.0f, 1.0f);
+    auto masterRail = contentBed.removeFromRight(332.0f);
+    drawPlate(g, masterRail, juce::Colour(0xff171513), 14.0f);
+    contentBed.removeFromRight(10.0f);
 
-    auto meterWell = contentBed.removeFromRight(158.0f).reduced(4.0f, 4.0f);
-    drawPlate(g, meterWell, juce::Colour(0xff161413), 14.0f);
+    drawPlate(g, contentBed, juce::Colour(0xff14110f), 14.0f);
+
+    const int stripGap = 8;
+    const int stripCount = 5;
+    const float stripWidth = (contentBed.getWidth() - static_cast<float>(stripGap * (stripCount - 1)))
+                             / static_cast<float>(stripCount);
+    for (int i = 0; i < stripCount; ++i)
+    {
+        const float x = contentBed.getX() + i * (stripWidth + static_cast<float>(stripGap));
+        auto stripArea = juce::Rectangle<float>(x, contentBed.getY(), stripWidth, contentBed.getHeight()).reduced(2.0f, 2.0f);
+        drawPlate(g, stripArea, (i % 2 == 0 ? juce::Colour(0xff15130f) : juce::Colour(0xff171619)), 11.0f);
+    }
+
+    auto faderWell = masterRail.reduced(10.0f, 10.0f).removeFromRight(82.0f);
+    drawPlate(g, faderWell, juce::Colour(0xff121417), 9.0f);
 }
 
 void BloomVerbAudioProcessorEditor::resized()
 {
     auto area = getLocalBounds().reduced(22, 20);
-    auto header = area.removeFromTop(108);
+    auto header = area.removeFromTop(104);
     auto titleRow = header.removeFromTop(38);
 
-    titleLabel.setBounds(titleRow.removeFromLeft(220));
-    statusLabel.setBounds(titleRow.removeFromRight(280));
+    titleLabel.setBounds(titleRow.removeFromLeft(280));
+    statusLabel.setBounds(titleRow.removeFromRight(320));
 
     auto infoRow = header.removeFromTop(22);
-    subtitleLabel.setBounds(infoRow.removeFromLeft(192));
+    subtitleLabel.setBounds(infoRow.removeFromLeft(280));
     typeLabel.setBounds(infoRow.removeFromLeft(34));
     infoRow.removeFromLeft(6);
-    typeBox.setBounds(infoRow.removeFromLeft(176));
+    typeBox.setBounds(infoRow.removeFromLeft(192));
 
     auto presetRow = header.removeFromTop(30);
     presetLabel.setBounds(presetRow.removeFromLeft(42));
     presetPrevButton.setBounds(presetRow.removeFromLeft(30));
     presetRow.removeFromLeft(4);
-    presetBox.setBounds(presetRow.removeFromLeft(224));
+    presetBox.setBounds(presetRow.removeFromLeft(244));
     presetRow.removeFromLeft(4);
     presetNextButton.setBounds(presetRow.removeFromLeft(30));
 
@@ -854,41 +942,47 @@ void BloomVerbAudioProcessorEditor::resized()
     fileStatusLabel.setBounds(presetRow);
 #endif
 
-    const int railWidth = 142;
-    const int gap = 8;
-    auto meterRail = area.removeFromRight(railWidth);
-    if (levelMeter != nullptr)
-        levelMeter->setBounds(meterRail);
+    const int sectionGap = 10;
+    auto masterRail = area.removeFromRight(332);
+    area.removeFromRight(sectionGap);
 
-    area.removeFromRight(gap);
+    const int stripGap = 8;
+    const int stripCount = 5;
+    const int stripWidth = (area.getWidth() - stripGap * (stripCount - 1)) / stripCount;
 
-    const int columnWidth = (area.getWidth() - gap * 2) / 3;
-    auto leftColumn = area.removeFromLeft(columnWidth);
-    area.removeFromLeft(gap);
-    auto centreColumn = area.removeFromLeft(columnWidth);
-    area.removeFromLeft(gap);
-    auto rightColumn = area;
+    std::array<juce::Rectangle<int>, 5> strips {};
+    for (int i = 0; i < stripCount; ++i)
+    {
+        strips[static_cast<std::size_t>(i)] = area.removeFromLeft(stripWidth);
+        if (i < stripCount - 1)
+            area.removeFromLeft(stripGap);
+    }
 
-    auto leftTop = leftColumn.removeFromTop(leftColumn.getHeight() / 2 + 4);
     if (spaceModule != nullptr)
-        spaceModule->setBounds(leftTop);
-    leftColumn.removeFromTop(gap);
+        spaceModule->setBounds(strips[0]);
     if (bloomModule != nullptr)
-        bloomModule->setBounds(leftColumn);
-
-    auto displayArea = centreColumn.removeFromTop(centreColumn.getHeight() / 2 - 18);
-    if (displayPanel != nullptr)
-        displayPanel->setBounds(displayArea);
-    centreColumn.removeFromTop(gap);
+        bloomModule->setBounds(strips[1]);
     if (characterModule != nullptr)
-        characterModule->setBounds(centreColumn);
-
-    auto rightTop = rightColumn.removeFromTop(rightColumn.getHeight() / 2 - 28);
+        characterModule->setBounds(strips[2]);
     if (sculptModule != nullptr)
-        sculptModule->setBounds(rightTop);
-    rightColumn.removeFromTop(gap);
+        sculptModule->setBounds(strips[3]);
     if (outputModule != nullptr)
-        outputModule->setBounds(rightColumn);
+        outputModule->setBounds(strips[4]);
+
+    auto screenArea = masterRail.removeFromTop(250).reduced(2, 0);
+    if (displayPanel != nullptr)
+        displayPanel->setBounds(screenArea);
+
+    masterRail.removeFromTop(8);
+    auto meterSection = masterRail;
+    auto faderLane = meterSection.removeFromRight(82).reduced(2, 0);
+    if (levelMeter != nullptr)
+        levelMeter->setBounds(meterSection);
+
+    auto faderInner = faderLane.reduced(6, 8);
+    outputFaderLabel.setBounds(faderInner.removeFromTop(20));
+    faderInner.removeFromTop(4);
+    outputFader.setBounds(faderInner);
 }
 
 void BloomVerbAudioProcessorEditor::timerCallback()
