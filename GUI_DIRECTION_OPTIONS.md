@@ -2,6 +2,8 @@
 
 This document captures GUI directions inspired by Brainworx 9099, UAD EQP-1A, FabFilter, Scheps Omni, and iZotope while keeping implementation asset-free until DSP/feature lock.
 
+For the current asset-pass handoff, see [`docs/UI_ASSET_SPEC.md`](./docs/UI_ASSET_SPEC.md).
+
 ## Shared constraints for current phase
 
 - No custom image assets yet
