@@ -15,9 +15,18 @@
       }
     },
     {
-      "name": "linux-release",
+      "name": "linux-base",
+      "hidden": true,
       "inherits": "base",
       "generator": "Unix Makefiles",
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "/usr/bin/gcc",
+        "CMAKE_CXX_COMPILER": "/usr/bin/g++"
+      }
+    },
+    {
+      "name": "linux-release",
+      "inherits": "linux-base",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release"
       }
