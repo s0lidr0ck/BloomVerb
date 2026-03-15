@@ -174,6 +174,28 @@ Generate one knob family and recolor per role rather than making 23 unique contr
 | `knob_gray` | 92 x 92 | 184 x 184 | Decay, Diffusion, general neutral use |
 | `knob_dark_master` | 92 x 92 | 184 x 184 | Optional darker utility variant |
 
+### 6.4 Knob family prompts
+
+Generate one base knob design, then recolor the central disc for each variant. **Reference design:** Two-part knob—(1) central smooth colored disc with white indicator, (2) outer silver-gray metallic rim with grooved grips. **Taller profile**—raised/domed, not flat. **Greenscreen background** (#00FF00)—key out in post with `scripts/green_to_transparent.py`. JUCE rotates the knob image to show the value; tick arc remains code-drawn.
+
+**Base knob prompt (use for `knob_gray`, then recolor central disc):**
+
+Analog console rotary knob, front-facing orthographic, solid bright greenscreen background (#00FF00, chroma key green). Two-part design: (1) Central disc: smooth, slightly glossy surface, neutral dark gray color, no texture or concentric rings, raised or domed to feel taller—not flat. (2) Outer rim: silver-gray brushed metallic, grooved grips around the circumference, taller profile for depth and height. Thin darker ring separates disc from rim. Prominent solid white vertical indicator line at 12 o'clock on the central disc. Strong shading and highlights to emphasize height and 3D form—knob should feel raised, tactile, not flat. Well-maintained hardware with light patina. No perspective distortion, no environment, no hands, no cables. Do not include: concentric rings on face, thick bezel, stepped base, tick marks, numbers, logos. Material emphasis: dark gray central disc, silver-gray metallic rim, subtle wear. Exact canvas: 184 x 184. Solid greenscreen background for chroma key.
+
+**Variant suffixes (replace material emphasis—central disc color only, rim stays silver-gray):**
+
+| Variant | Material/color emphasis |
+|---------|-------------------------|
+| `knob_blue` | Light blue or pale cyan central disc |
+| `knob_teal` | Teal/cyan central disc |
+| `knob_mint` | Pale mint green central disc |
+| `knob_red` | Muted red central disc |
+| `knob_bronze` | Warm bronze or cream central disc |
+| `knob_gray` | Neutral dark gray (base) |
+| `knob_dark_master` | Darker charcoal central disc, subdued |
+
+**Negative prompt (shared):** Angled camera, 3/4 perspective, warped circles, blurry text, tick marks or numbers baked in, visible room/background, logos, brand-new showroom finish, mirror-polished metal, excessive gloss, toy-like plastic shine, encoder without indicator, thick bezel, stepped base, concentric housing rings, bulky framing, flat, pancake.
+
 ## 7. Exact control placement map
 
 These coordinates describe the current live control bounds. Keep these regions clear or aligned when generating strip assets.
@@ -256,8 +278,7 @@ Keep these live in JUCE unless there is a strong reason to bake them into assets
 - status text
 - preset names
 - type selector text
-- rotary pointer lines
-- rotary tick arcs
+- rotary tick arcs (scale around knob)
 - combo-box arrows
 - meter fill and overload behavior
 - room field wireframe display content
