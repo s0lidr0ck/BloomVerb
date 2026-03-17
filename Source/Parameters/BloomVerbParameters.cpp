@@ -36,9 +36,9 @@ juce::AudioProcessorValueTreeState::ParameterLayout createParameterLayout()
     layout.push_back(std::make_unique<AudioParameterChoice>(IDs::type, "Type", getTypeChoices(), 1));
     layout.push_back(makeFloatParameter(IDs::size, "Size", NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.50f));
     layout.push_back(makeFloatParameter(IDs::decaySeconds, "Decay",
-                                        NormalisableRange<float>(0.10f, 20.0f, 0.001f, 0.4f), 2.80f, "s"));
+                                        NormalisableRange<float>(0.10f, 30.0f, 0.001f, 0.4f), 2.80f, "s"));
     layout.push_back(makeFloatParameter(IDs::preDelayMs, "PreDelay",
-                                        NormalisableRange<float>(0.0f, 250.0f, 0.01f, 0.6f), 20.0f, "ms"));
+                                        NormalisableRange<float>(0.0f, 400.0f, 0.01f, 0.6f), 20.0f, "ms"));
     layout.push_back(makeFloatParameter(IDs::diffusion, "Diffusion", NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.65f));
     layout.push_back(makeFloatParameter(IDs::damping, "Damping", NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.45f));
     layout.push_back(makeFloatParameter(IDs::early, "Early", NormalisableRange<float>(0.0f, 1.0f, 0.001f), 0.35f));

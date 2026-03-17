@@ -38,6 +38,8 @@ juce_add_plugin(BloomVerb
 
 target_sources(BloomVerb
     PRIVATE
+        Source/AssetLoader.cpp
+        Source/AssetLoader.h
         Source/PluginProcessor.cpp
         Source/PluginProcessor.h
         Source/PluginEditor.cpp
@@ -48,10 +50,18 @@ target_sources(BloomVerb
         Source/Presets/BloomVerbPreset.h
         Source/Presets/BloomVerbPresetBank.cpp
         Source/Presets/BloomVerbPresetBank.h
+        Source/DSP/CloudBloomDreamAlgorithm.cpp
+        Source/DSP/CloudBloomDreamAlgorithm.h
         Source/DSP/FDNCore.cpp
         Source/DSP/FDNCore.h
         Source/DSP/FreezeController.cpp
         Source/DSP/FreezeController.h
+        Source/DSP/GrainSpecialAlgorithm.cpp
+        Source/DSP/GrainSpecialAlgorithm.h
+        Source/DSP/HallRoomAlgorithm.cpp
+        Source/DSP/HallRoomAlgorithm.h
+        Source/DSP/PlateAlgorithm.cpp
+        Source/DSP/PlateAlgorithm.h
         Source/DSP/BloomVerbSmoothers.h
         Source/DSP/BloomVerbEngine.cpp
         Source/DSP/BloomVerbEngine.h
@@ -76,6 +86,14 @@ target_link_libraries(BloomVerb
         juce::juce_recommended_warning_flags
 )
 
+# Copy assets to Standalone output so knob images and full_ui load when exe runs from build dir
+add_custom_command(TARGET BloomVerb_Standalone POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_directory
+        ${CMAKE_CURRENT_SOURCE_DIR}/assets
+        $<TARGET_FILE_DIR:BloomVerb_Standalone>/assets
+    COMMENT "Copying assets to Standalone output"
+)
+
 juce_add_gui_app(BloomVerbLoopTester
     PRODUCT_NAME "BloomVerb Loop Tester"
     COMPANY_NAME "BloomVerb"
@@ -85,8 +103,16 @@ juce_add_gui_app(BloomVerbLoopTester
 target_sources(BloomVerbLoopTester
     PRIVATE
         Source/Tester/LoopTesterMain.cpp
+        Source/DSP/CloudBloomDreamAlgorithm.cpp
+        Source/DSP/CloudBloomDreamAlgorithm.h
         Source/DSP/FDNCore.cpp
         Source/DSP/FDNCore.h
+        Source/DSP/GrainSpecialAlgorithm.cpp
+        Source/DSP/GrainSpecialAlgorithm.h
+        Source/DSP/HallRoomAlgorithm.cpp
+        Source/DSP/HallRoomAlgorithm.h
+        Source/DSP/PlateAlgorithm.cpp
+        Source/DSP/PlateAlgorithm.h
         Source/DSP/FreezeController.cpp
         Source/DSP/FreezeController.h
         Source/DSP/BloomVerbSmoothers.h
@@ -116,8 +142,12 @@ if(BUILD_TESTING)
     set(BLOOMVERB_TEST_COMMON_SOURCES
         Source/DSP/BloomVerbEngine.cpp
         Source/DSP/BloomVerbTypeVoicing.cpp
+        Source/DSP/CloudBloomDreamAlgorithm.cpp
         Source/DSP/FDNCore.cpp
         Source/DSP/FreezeController.cpp
+        Source/DSP/GrainSpecialAlgorithm.cpp
+        Source/DSP/HallRoomAlgorithm.cpp
+        Source/DSP/PlateAlgorithm.cpp
         Source/Parameters/BloomVerbParameters.cpp
         Source/Presets/BloomVerbPreset.cpp
         Source/Presets/BloomVerbPresetBank.cpp
@@ -167,9 +197,11 @@ if(BUILD_TESTING)
     bloomverb_add_test(BloomVerbFreezeAutomationStressTests Tests/BloomVerbFreezeAutomationStressTests.cpp)
     bloomverb_add_test(BloomVerbPerformanceGateTests Tests/BloomVerbPerformanceGateTests.cpp)
     bloomverb_add_test(BloomVerbMonoFoldDownTests Tests/BloomVerbMonoFoldDownTests.cpp)
+    bloomverb_add_test(BloomVerbSpaceTypeSweepTests Tests/BloomVerbSpaceTypeSweepTests.cpp)
 
     target_sources(BloomVerbPresetRecallTests
         PRIVATE
+            Source/AssetLoader.cpp
             Source/PluginProcessor.cpp
             Source/PluginEditor.cpp
     )

@@ -1,6 +1,9 @@
 /build/
 /build-*/
+/out/
 /.idea/
 /.vs/
 *.user
 *.DS_Store
+*.msi
+*.zip

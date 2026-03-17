@@ -7,9 +7,10 @@
 #include <juce_audio_basics/juce_audio_basics.h>
 #include <juce_dsp/juce_dsp.h>
 
+#include "IReverbAlgorithm.h"
+
 namespace bloomverb
 {
-class FDNCore;
 class FreezeController;
 class RuntimeParameterSmoothers;
 
@@ -81,7 +82,7 @@ private:
     std::array<juce::dsp::StateVariableTPTFilter<float>, 2> highCutFilters;
     juce::AudioBuffer<float> dryScratchBuffer;
     juce::AudioBuffer<float> wetScratchBuffer;
-    std::unique_ptr<FDNCore> fdnCore;
+    std::array<std::unique_ptr<IReverbAlgorithm>, 4> algorithms;
     std::unique_ptr<FreezeController> freezeController;
     std::unique_ptr<RuntimeParameterSmoothers> parameterSmoothers;
 

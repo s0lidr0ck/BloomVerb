@@ -19,6 +19,21 @@ const auto stripCool = juce::Colour(0xffa8b6bc);
 const auto stripWarm = juce::Colour(0xffc0b39d);
 const auto stripNeutral = juce::Colour(0xff9ca3ac);
 
+bool hasFullUiSkin(AssetLoader* loader)
+{
+    return loader != nullptr
+        && (loader->hasImage("full_ui_1x.png") || loader->hasImage("full_ui.png"));
+}
+
+juce::Image getFullUiSkin(AssetLoader& loader)
+{
+    auto img = loader.getImage("full_ui_1x.png");
+    if (img.isValid())
+        return img;
+
+    return loader.getImage("full_ui.png");
+}
+
 void drawScrews(juce::Graphics& g, juce::Rectangle<float> area)
 {
     const float radius = 5.0f;
@@ -56,7 +71,7 @@ void drawPlate(juce::Graphics& g, juce::Rectangle<float> bounds, juce::Colour ba
 class BloomVerbAudioProcessorEditor::ProductionLookAndFeel final : public juce::LookAndFeel_V4
 {
 public:
-    ProductionLookAndFeel()
+    explicit ProductionLookAndFeel(AssetLoader* loader) : assetLoader(loader)
     {
         setColour(juce::Slider::textBoxTextColourId, juce::Colour(0xfff6eee0));
         setColour(juce::Slider::textBoxOutlineColourId, juce::Colour(0xff6a6258));
@@ -73,6 +88,26 @@ public:
         setColour(juce::CaretComponent::caretColourId, juce::Colour(0xfffef3dd));
     }
 
+    juce::Slider::SliderLayout getSliderLayout(juce::Slider& slider) override
+    {
+        auto layout = LookAndFeel_V4::getSliderLayout(slider);
+
+        const bool usingFullUiSkin = hasFullUiSkin(assetLoader);
+        const bool isRotary = slider.getSliderStyle() == juce::Slider::RotaryHorizontalVerticalDrag
+                           || slider.getSliderStyle() == juce::Slider::Rotary
+                           || slider.getSliderStyle() == juce::Slider::RotaryHorizontalDrag
+                           || slider.getSliderStyle() == juce::Slider::RotaryVerticalDrag;
+
+        if (usingFullUiSkin && isRotary)
+        {
+            auto bounds = slider.getLocalBounds();
+            layout.sliderBounds = bounds;
+            layout.textBoxBounds = juce::Rectangle<int>(50, 16).withCentre(bounds.getCentre());
+        }
+
+        return layout;
+    }
+
     void drawRotarySlider(juce::Graphics& g,
                           int x,
                           int y,
@@ -83,64 +118,117 @@ public:
                           const float rotaryEndAngle,
                           juce::Slider& slider) override
     {
+        const bool usingFullUiSkin = hasFullUiSkin(assetLoader);
         auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
-                                             static_cast<float>(width), static_cast<float>(height)).reduced(10.0f);
+                                             static_cast<float>(width), static_cast<float>(height))
+                          .reduced(usingFullUiSkin ? 2.0f : 10.0f);
         const auto radius = juce::jmin(bounds.getWidth(), bounds.getHeight()) * 0.5f;
         const auto centre = bounds.getCentre();
         const auto angle = rotaryStartAngle + sliderPos * (rotaryEndAngle - rotaryStartAngle);
         const auto accent = slider.findColour(juce::Slider::rotarySliderFillColourId)
                                 .interpolatedWith(brass, 0.35f);
 
-        juce::Path tickArc;
-        tickArc.addCentredArc(centre.x, centre.y, radius * 0.96f, radius * 0.96f, 0.0f,
-                              rotaryStartAngle, rotaryEndAngle, true);
-        g.setColour(juce::Colour(0x556d6559));
-        g.strokePath(tickArc, juce::PathStrokeType(2.0f));
+        // Add a stronger lower contact shadow that extends just beyond the knob's
+        // bottom edge so it reads against the panel texture.
+        const auto shadowBase = bounds.reduced(bounds.getWidth() * 0.10f, bounds.getHeight() * 0.32f)
+                                   .translated(usingFullUiSkin ? 1.5f : 1.0f,
+                                               usingFullUiSkin ? 10.0f : 7.0f);
+        g.saveState();
+        auto shadowClip = bounds;
+        shadowClip.setY(centre.y + bounds.getHeight() * 0.18f);
+        shadowClip.setHeight(bounds.getBottom() - shadowClip.getY() + bounds.getHeight() * 0.18f);
+        g.reduceClipRegion(shadowClip.toNearestInt());
 
-        for (int i = 0; i < 11; ++i)
+        for (int i = 0; i < 3; ++i)
         {
-            const float amount = static_cast<float>(i) / 10.0f;
-            const float tickAngle = rotaryStartAngle + amount * (rotaryEndAngle - rotaryStartAngle);
-            const auto inner = juce::Point<float>(centre.x + std::cos(tickAngle) * radius * 0.82f,
-                                                  centre.y + std::sin(tickAngle) * radius * 0.82f);
-            const auto outer = juce::Point<float>(centre.x + std::cos(tickAngle) * radius * 0.96f,
-                                                  centre.y + std::sin(tickAngle) * radius * 0.96f);
-            g.setColour(amount <= sliderPos ? accent.brighter(0.15f) : juce::Colour(0xff4c463f));
-            g.drawLine(inner.x, inner.y, outer.x, outer.y, i % 5 == 0 ? 1.8f : 1.0f);
+            const float expansion = static_cast<float>(i) * 1.35f;
+            const float alpha = usingFullUiSkin ? (0.30f - i * 0.08f) : (0.22f - i * 0.06f);
+            g.setColour(juce::Colours::black.withAlpha(juce::jmax(0.0f, alpha)));
+            g.fillEllipse(shadowBase.expanded(expansion, expansion * 0.55f));
+        }
+        g.restoreState();
+
+        if (!usingFullUiSkin)
+        {
+            juce::Path tickArc;
+            tickArc.addCentredArc(centre.x, centre.y, radius * 0.96f, radius * 0.96f, 0.0f,
+                                  rotaryStartAngle, rotaryEndAngle, true);
+            g.setColour(juce::Colour(0x556d6559));
+            g.strokePath(tickArc, juce::PathStrokeType(2.0f));
+
+            for (int i = 0; i < 11; ++i)
+            {
+                const float amount = static_cast<float>(i) / 10.0f;
+                const float tickAngle = rotaryStartAngle + amount * (rotaryEndAngle - rotaryStartAngle);
+                const auto inner = juce::Point<float>(centre.x + std::cos(tickAngle) * radius * 0.82f,
+                                                      centre.y + std::sin(tickAngle) * radius * 0.82f);
+                const auto outer = juce::Point<float>(centre.x + std::cos(tickAngle) * radius * 0.96f,
+                                                      centre.y + std::sin(tickAngle) * radius * 0.96f);
+                g.setColour(amount <= sliderPos ? accent.brighter(0.15f) : juce::Colour(0xff4c463f));
+                g.drawLine(inner.x, inner.y, outer.x, outer.y, i % 5 == 0 ? 1.8f : 1.0f);
+            }
         }
 
-        juce::ColourGradient outerRing(juce::Colour(0xffa8a09a), centre.x, bounds.getY(),
-                                       juce::Colour(0xff2a2927), centre.x, bounds.getBottom(), false);
-        g.setGradientFill(outerRing);
-        g.fillEllipse(bounds);
+        juce::String assetName = slider.getProperties().getWithDefault("bloomverb_knob_asset", juce::var()).toString();
+        if (assetName.isEmpty())
+            assetName = "knob_grey.png";
 
-        const auto bezel = bounds.reduced(radius * 0.11f);
-        juce::ColourGradient bezelGrad(juce::Colour(0xff09090a), bezel.getCentreX(), bezel.getY(),
-                                       juce::Colour(0xff313239), bezel.getCentreX(), bezel.getBottom(), false);
-        g.setGradientFill(bezelGrad);
-        g.fillEllipse(bezel);
+        juce::Image knobImg;
+        if (assetLoader != nullptr)
+            knobImg = assetLoader->getImage(assetName);
 
-        const auto dial = bezel.reduced(radius * 0.13f);
-        juce::ColourGradient dialGrad(juce::Colour(0xff68615d), dial.getX(), dial.getY(),
-                                      juce::Colour(0xff22242a), dial.getRight(), dial.getBottom(), true);
-        g.setGradientFill(dialGrad);
-        g.fillEllipse(dial);
+        if (knobImg.isValid())
+        {
+            const float knobSize = radius * 2.0f * (usingFullUiSkin ? 0.98f : 0.92f);
+            const float imgW = static_cast<float>(knobImg.getWidth());
+            const float imgH = static_cast<float>(knobImg.getHeight());
+            const float scale = knobSize / imgW;
+            const float pivotX = imgW * 0.5f;
+            const float pivotY = usingFullUiSkin ? 1271.8f : imgH * 0.5f;
+            auto t = juce::AffineTransform::translation(-imgW * 0.5f, -imgH * 0.5f)
+                         .translated(imgW * 0.5f - pivotX, imgH * 0.5f - pivotY)
+                         .scaled(scale, scale)
+                         .rotated(angle)
+                         .translated(centre.x, centre.y);
+            g.setOpacity(0.9f);
+            g.drawImageTransformed(knobImg, t);
+            g.setOpacity(1.0f);
+        }
+        else
+        {
+            juce::ColourGradient outerRing(juce::Colour(0xffa8a09a), centre.x, bounds.getY(),
+                                           juce::Colour(0xff2a2927), centre.x, bounds.getBottom(), false);
+            g.setGradientFill(outerRing);
+            g.fillEllipse(bounds);
 
-        const auto cap = dial.reduced(radius * 0.22f);
-        g.setColour(accent.withAlpha(0.82f));
-        g.fillEllipse(cap);
-        g.setColour(accent.brighter(0.18f));
-        g.drawEllipse(cap, 1.0f);
+            const auto bezel = bounds.reduced(radius * 0.11f);
+            juce::ColourGradient bezelGrad(juce::Colour(0xff09090a), bezel.getCentreX(), bezel.getY(),
+                                           juce::Colour(0xff313239), bezel.getCentreX(), bezel.getBottom(), false);
+            g.setGradientFill(bezelGrad);
+            g.fillEllipse(bezel);
 
-        juce::Path pointer;
-        const float pointerLength = radius * 0.56f;
-        const float pointerThickness = 4.0f;
-        pointer.addRoundedRectangle(-pointerThickness * 0.5f, -pointerLength, pointerThickness, pointerLength, 1.6f);
-        g.setColour(juce::Colour(0xfff8f1e6));
-        g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centre.x, centre.y));
+            const auto dial = bezel.reduced(radius * 0.13f);
+            juce::ColourGradient dialGrad(juce::Colour(0xff68615d), dial.getX(), dial.getY(),
+                                          juce::Colour(0xff22242a), dial.getRight(), dial.getBottom(), true);
+            g.setGradientFill(dialGrad);
+            g.fillEllipse(dial);
 
-        g.setColour(juce::Colour(0x995e5347));
-        g.drawEllipse(bounds, 1.0f);
+            const auto cap = dial.reduced(radius * 0.22f);
+            g.setColour(accent.withAlpha(0.82f));
+            g.fillEllipse(cap);
+            g.setColour(accent.brighter(0.18f));
+            g.drawEllipse(cap, 1.0f);
+
+            juce::Path pointer;
+            const float pointerLength = radius * 0.56f;
+            const float pointerThickness = 4.0f;
+            pointer.addRoundedRectangle(-pointerThickness * 0.5f, -pointerLength, pointerThickness, pointerLength, 1.6f);
+            g.setColour(juce::Colour(0xfff8f1e6));
+            g.fillPath(pointer, juce::AffineTransform::rotation(angle).translated(centre.x, centre.y));
+
+            g.setColour(juce::Colour(0x995e5347));
+            g.drawEllipse(bounds, 1.0f);
+        }
     }
 
     void drawLinearSlider(juce::Graphics& g,
@@ -162,11 +250,26 @@ public:
 
         auto bounds = juce::Rectangle<float>(static_cast<float>(x), static_cast<float>(y),
                                              static_cast<float>(width), static_cast<float>(height)).reduced(4.0f, 2.0f);
-        drawPlate(g, bounds, juce::Colour(0xff17191c), 7.0f);
+
+        juce::Image laneImg;
+        juce::Image thumbImg;
+        const bool usingFullUiSkin = hasFullUiSkin(assetLoader);
+        if (assetLoader != nullptr)
+        {
+            if (!usingFullUiSkin)
+                laneImg = assetLoader->getImage("fader_lane_bg.png");
+            thumbImg = assetLoader->getImage("fader_thumb.png");
+        }
+
+        if (laneImg.isValid())
+            g.drawImage(laneImg, bounds, juce::RectanglePlacement::stretchToFit);
+        else
+            drawPlate(g, bounds, juce::Colour(0xff17191c), 7.0f);
 
         auto track = bounds.reduced(bounds.getWidth() * 0.33f, 12.0f);
         track.setX(bounds.getCentreX() - track.getWidth() * 0.5f);
-        drawPlate(g, track, juce::Colour(0xff0f1215), 4.0f);
+        if (!laneImg.isValid())
+            drawPlate(g, track, juce::Colour(0xff0f1215), 4.0f);
 
         for (int i = 0; i < 9; ++i)
         {
@@ -176,7 +279,9 @@ public:
             g.drawLine(track.getRight() + 4.0f, markY, bounds.getRight() - 3.0f, markY, i % 2 == 0 ? 1.1f : 0.8f);
         }
 
-        const float clampedPos = juce::jlimit(track.getY(), track.getBottom(), sliderPos);
+        const float pos01 = juce::jlimit(0.0f, 1.0f, sliderPos);
+        const float clampedPos = juce::jlimit(track.getY(), track.getBottom(),
+                                              track.getBottom() - pos01 * track.getHeight());
         auto fill = track;
         fill.setY(clampedPos);
         juce::ColourGradient fillGrad(juce::Colour(0xff2ca6c3), fill.getCentreX(), fill.getBottom(),
@@ -184,14 +289,24 @@ public:
         g.setGradientFill(fillGrad);
         g.fillRoundedRectangle(fill, 3.0f);
 
-        auto thumb = juce::Rectangle<float>(bounds.getWidth() - 14.0f, 16.0f)
-                         .withCentre({ bounds.getCentreX(), clampedPos });
-        juce::ColourGradient thumbFill(juce::Colour(0xffddd4c8), thumb.getCentreX(), thumb.getY(),
-                                       juce::Colour(0xff81786d), thumb.getCentreX(), thumb.getBottom(), false);
-        g.setGradientFill(thumbFill);
-        g.fillRoundedRectangle(thumb, 3.0f);
-        g.setColour(juce::Colour(0xbb2b2520));
-        g.drawRoundedRectangle(thumb, 3.0f, 0.9f);
+        if (thumbImg.isValid())
+        {
+            const float thumbW = juce::jmin(bounds.getWidth() * 0.65f, 51.0f);
+            const float thumbH = thumbW * (92.0f / 51.0f);
+            auto thumb = juce::Rectangle<float>(thumbW, thumbH).withCentre({ bounds.getCentreX(), clampedPos });
+            g.drawImage(thumbImg, thumb, juce::RectanglePlacement::stretchToFit);
+        }
+        else
+        {
+            auto thumb = juce::Rectangle<float>(bounds.getWidth() - 14.0f, 16.0f)
+                             .withCentre({ bounds.getCentreX(), clampedPos });
+            juce::ColourGradient thumbFill(juce::Colour(0xffddd4c8), thumb.getCentreX(), thumb.getY(),
+                                           juce::Colour(0xff81786d), thumb.getCentreX(), thumb.getBottom(), false);
+            g.setGradientFill(thumbFill);
+            g.fillRoundedRectangle(thumb, 3.0f);
+            g.setColour(juce::Colour(0xbb2b2520));
+            g.drawRoundedRectangle(thumb, 3.0f, 0.9f);
+        }
     }
 
     void drawButtonBackground(juce::Graphics& g,
@@ -265,11 +380,16 @@ public:
         g.setColour(box.isEnabled() ? juce::Colour(0xffeedcc3) : juce::Colour(0xff7b736a));
         g.strokePath(arrow, juce::PathStrokeType(1.8f));
     }
+
+private:
+    AssetLoader* assetLoader = nullptr;
 };
 
 class BloomVerbAudioProcessorEditor::LevelMeter final : public juce::Component
 {
 public:
+    explicit LevelMeter(AssetLoader* loader) : assetLoader(loader) {}
+
     void setLevels(float newInputLevel, float newOutputLevel, float newFreezeAmount)
     {
         inputLevel = juce::jlimit(0.0f, 1.0f, newInputLevel);
@@ -280,9 +400,22 @@ public:
 
     void paint(juce::Graphics& g) override
     {
+        const bool usingFullUiSkin = hasFullUiSkin(assetLoader);
+        if (usingFullUiSkin)
+        {
+            drawBar(g, juce::Rectangle<float>(20.0f, 58.0f, 98.0f, 314.0f), inputLevel, "IN");
+            drawBar(g, juce::Rectangle<float>(132.0f, 58.0f, 98.0f, 314.0f), outputLevel, "OUT");
+            return;
+        }
+
         auto area = getLocalBounds().toFloat().reduced(4.0f);
-        drawPlate(g, area, juce::Colour(0xff1a1816), 14.0f);
-        drawScrews(g, area);
+        juce::Image frameImg = (assetLoader != nullptr) ? assetLoader->getImage("meter_frame.png") : juce::Image();
+
+        if (!frameImg.isValid())
+        {
+            drawPlate(g, area, juce::Colour(0xff1a1816), 14.0f);
+            drawScrews(g, area);
+        }
 
         auto inner = area.reduced(16.0f, 16.0f);
         auto header = inner.removeFromTop(38.0f);
@@ -317,6 +450,9 @@ public:
         g.setColour(juce::Colour(0xff8f9cac));
         g.setFont(juce::Font(juce::FontOptions(10.5f, juce::Font::plain)));
         g.drawText("Input / Output", footer.toNearestInt(), juce::Justification::centredLeft, false);
+
+        if (frameImg.isValid())
+            g.drawImage(frameImg, getLocalBounds().toFloat(), juce::RectanglePlacement::stretchToFit);
     }
 
 private:
@@ -349,6 +485,7 @@ private:
         g.drawText(label, labelArea.toNearestInt(), juce::Justification::centred, false);
     }
 
+    AssetLoader* assetLoader = nullptr;
     float inputLevel = 0.0f;
     float outputLevel = 0.0f;
     float freezeAmount = 0.0f;
@@ -357,16 +494,25 @@ private:
 class BloomVerbAudioProcessorEditor::DisplayPanel final : public juce::Component
 {
 public:
-    explicit DisplayPanel(juce::AudioProcessorValueTreeState& state) : apvts(state)
+    DisplayPanel(juce::AudioProcessorValueTreeState& state, AssetLoader* loader) : apvts(state), assetLoader(loader)
     {
-        setOpaque(true);
+        setOpaque(!hasFullUiSkin(loader));
     }
 
     void paint(juce::Graphics& g) override
     {
+        const bool usingFullUiSkin = hasFullUiSkin(assetLoader);
+        if (usingFullUiSkin)
+            return;
+
         auto area = getLocalBounds().toFloat().reduced(4.0f);
-        drawPlate(g, area, juce::Colour(0xff191613), 14.0f);
-        drawScrews(g, area);
+        juce::Image frameImg = (assetLoader != nullptr) ? assetLoader->getImage("display_frame.png") : juce::Image();
+
+        if (!frameImg.isValid())
+        {
+            drawPlate(g, area, juce::Colour(0xff191613), 14.0f);
+            drawScrews(g, area);
+        }
 
         auto inner = area.reduced(14.0f, 14.0f);
         auto titleRow = inner.removeFromTop(30.0f);
@@ -397,6 +543,9 @@ public:
         g.setColour(juce::Colour(0xff6bb6d1));
         g.setFont(juce::Font(juce::FontOptions(10.5f, juce::Font::bold)));
         g.drawText(buildFooterText(), statArea, juce::Justification::centredLeft, false);
+
+        if (frameImg.isValid())
+            g.drawImage(frameImg, getLocalBounds().toFloat(), juce::RectanglePlacement::stretchToFit);
     }
 
 private:
@@ -495,6 +644,7 @@ private:
     }
 
     juce::AudioProcessorValueTreeState& apvts;
+    AssetLoader* assetLoader = nullptr;
 };
 
 class BloomVerbAudioProcessorEditor::ParameterModule final : public juce::Component
@@ -507,20 +657,24 @@ public:
                     juce::String titleText,
                     int rowsIn,
                     int columnsIn,
-                    juce::Colour accentIn)
-        : apvts(state), title(std::move(titleText)), rows(rowsIn), columns(columnsIn), accent(accentIn)
+                    juce::Colour accentIn,
+                    bool useFullUiSkinIn)
+        : apvts(state), title(std::move(titleText)), rows(rowsIn), columns(columnsIn),
+          accent(accentIn), useFullUiSkin(useFullUiSkinIn)
     {
         moduleTint = accent.interpolatedWith(juce::Colour(0xffc8c0b5), 0.78f)
                          .withMultipliedSaturation(0.34f)
                          .withMultipliedBrightness(0.82f);
-        setOpaque(true);
+        setOpaque(!useFullUiSkin);
+        setInterceptsMouseClicks(!useFullUiSkin, true);
     }
 
     void addKnob(const juce::String& paramID,
                  const juce::String& name,
                  int row,
                  int column,
-                 juce::Colour knobAccent = {})
+                 juce::Colour knobAccent = {},
+                 const juce::String& knobAsset = "knob_grey.png")
     {
         auto control = std::make_unique<SliderControl>();
         control->label.setText(name, juce::dontSendNotification);
@@ -532,6 +686,13 @@ public:
         control->slider.setPopupDisplayEnabled(true, false, this);
         control->slider.setColour(juce::Slider::rotarySliderFillColourId,
                                   knobAccent.isTransparent() ? accent : knobAccent);
+        if (useFullUiSkin)
+        {
+            control->slider.setColour(juce::Slider::textBoxBackgroundColourId, juce::Colours::transparentBlack);
+            control->slider.setColour(juce::Slider::textBoxOutlineColourId, juce::Colours::transparentBlack);
+        }
+        control->slider.getProperties().set("bloomverb_knob_asset", knobAsset);
+        control->paramID = paramID;
         control->row = row;
         control->column = column;
         control->attachment = std::make_unique<SliderAttachment>(apvts, paramID, control->slider);
@@ -558,6 +719,9 @@ public:
 
     void paint(juce::Graphics& g) override
     {
+        if (useFullUiSkin)
+            return;
+
         auto area = getLocalBounds().toFloat().reduced(2.0f);
         drawPlate(g, area, moduleTint, 11.0f);
         drawScrews(g, area);
@@ -576,6 +740,26 @@ public:
 
     void resized() override
     {
+        if (useFullUiSkin)
+        {
+            for (const auto& knob : sliders)
+            {
+                const auto centre = getFullUiKnobCentre(knob->paramID);
+                const int knobDiameter = getFullUiKnobDiameter(knob->paramID);
+                auto knobArea = juce::Rectangle<int>(knobDiameter, knobDiameter).withCentre(centre);
+                knob->slider.setBounds(knobArea);
+                knob->label.setBounds({});
+            }
+
+            for (const auto& toggle : toggles)
+            {
+                auto toggleArea = getFullUiToggleBounds(toggle->button.getButtonText());
+                toggle->button.setBounds(toggleArea);
+            }
+
+            return;
+        }
+
         auto area = getLocalBounds().reduced(10, 10);
         area.removeFromTop(33);
 
@@ -609,10 +793,71 @@ public:
     }
 
 private:
+    static juce::Point<int> getFullUiKnobCentre(const juce::String& paramID)
+    {
+        using namespace bloomverb::params;
+
+        if (paramID == IDs::size) return { 92, 241 };
+        if (paramID == IDs::decaySeconds) return { 126, 352 };
+        if (paramID == IDs::preDelayMs) return { 89, 464 };
+        if (paramID == IDs::distance) return { 126, 576 };
+        if (paramID == IDs::mix) return { 108, 726 };
+
+        if (paramID == IDs::motion) return { 290, 300 };
+        if (paramID == IDs::texture) return { 290, 425 };
+        if (paramID == IDs::swell) return { 290, 550 };
+        if (paramID == IDs::bloomAmount) return { 290, 675 };
+
+        if (paramID == IDs::dynamic) return { 456, 218 };
+        if (paramID == IDs::harmonic) return { 498, 322 };
+        if (paramID == IDs::warp) return { 456, 426 };
+        if (paramID == IDs::damping) return { 498, 529 };
+        if (paramID == IDs::width) return { 456, 633 };
+        if (paramID == IDs::early) return { 498, 737 };
+
+        if (paramID == IDs::diffusion) return { 665, 301 };
+        if (paramID == IDs::tone) return { 665, 426 };
+        if (paramID == IDs::lowCutHz) return { 665, 550 };
+        if (paramID == IDs::highCutHz) return { 665, 675 };
+
+        if (paramID == IDs::modRateHz) return { 852, 301 };
+        if (paramID == IDs::modDepth) return { 852, 425 };
+        if (paramID == IDs::duckAmount) return { 852, 550 };
+        if (paramID == IDs::transientPreserve) return { 852, 674 };
+
+        return { 0, 0 };
+    }
+
+    static juce::Rectangle<int> getFullUiToggleBounds(const juce::String& buttonText)
+    {
+        if (buttonText == "Freeze Hold")
+            return { 916, 704, 88, 30 };
+
+        return {};
+    }
+
+    static int getFullUiKnobDiameter(const juce::String& paramID)
+    {
+        using namespace bloomverb::params;
+
+        if (paramID == IDs::motion
+            || paramID == IDs::texture
+            || paramID == IDs::swell
+            || paramID == IDs::bloomAmount
+            || paramID == IDs::diffusion
+            || paramID == IDs::tone
+            || paramID == IDs::lowCutHz
+            || paramID == IDs::highCutHz)
+            return 92;
+
+        return 86;
+    }
+
     struct SliderControl
     {
         juce::Label label;
         juce::Slider slider;
+        juce::String paramID;
         int row = 0;
         int column = 0;
         std::unique_ptr<SliderAttachment> attachment;
@@ -632,18 +877,23 @@ private:
     int columns = 1;
     juce::Colour accent;
     juce::Colour moduleTint;
+    bool useFullUiSkin = false;
     std::vector<std::unique_ptr<SliderControl>> sliders;
     std::vector<std::unique_ptr<ToggleControl>> toggles;
 };
 
 BloomVerbAudioProcessorEditor::BloomVerbAudioProcessorEditor(BloomVerbAudioProcessor& p)
     : AudioProcessorEditor(&p), processor(p), apvts(p.getAPVTS()),
-      lookAndFeel(std::make_unique<ProductionLookAndFeel>()),
-      levelMeter(std::make_unique<LevelMeter>()),
-      displayPanel(std::make_unique<DisplayPanel>(apvts))
+      lookAndFeel(std::make_unique<ProductionLookAndFeel>(&assetLoader)),
+    levelMeter(std::make_unique<LevelMeter>(&assetLoader)),
+    displayPanel(std::make_unique<DisplayPanel>(apvts, &assetLoader))
 {
     setLookAndFeel(lookAndFeel.get());
+#if JucePlugin_Build_Standalone
+    setSize(1480, 860 + 44);
+#else
     setSize(1480, 860);
+#endif
     setResizable(false, false);
 
     titleLabel.setText("BloomVerb", juce::dontSendNotification);
@@ -807,42 +1057,44 @@ void BloomVerbAudioProcessorEditor::refreshPresetSelection()
 
 void BloomVerbAudioProcessorEditor::setupModules()
 {
-    spaceModule = std::make_unique<ParameterModule>(apvts, "Space", 3, 2, stripWarm);
-    spaceModule->addKnob(bloomverb::params::IDs::size, "Size", 0, 0, brass);
-    spaceModule->addKnob(bloomverb::params::IDs::decaySeconds, "Decay", 0, 1, juce::Colour(0xff9aa7bf));
-    spaceModule->addKnob(bloomverb::params::IDs::preDelayMs, "PreDelay", 1, 0, juce::Colour(0xff88acba));
-    spaceModule->addKnob(bloomverb::params::IDs::mix, "Mix", 1, 1, redAccent);
-    spaceModule->addKnob(bloomverb::params::IDs::distance, "Distance", 2, 0, juce::Colour(0xff9ba38a));
+    const bool usingFullUiSkin = hasFullUiSkin(&assetLoader);
+
+    spaceModule = std::make_unique<ParameterModule>(apvts, "Space", 3, 2, stripWarm, usingFullUiSkin);
+    spaceModule->addKnob(bloomverb::params::IDs::size, "Size", 0, 0, brass, "knob_brass.png");
+    spaceModule->addKnob(bloomverb::params::IDs::decaySeconds, "Decay", 0, 1, juce::Colour(0xff9aa7bf), "knob_grey.png");
+    spaceModule->addKnob(bloomverb::params::IDs::preDelayMs, "PreDelay", 1, 0, juce::Colour(0xff88acba), "knob_teal.png");
+    spaceModule->addKnob(bloomverb::params::IDs::mix, "Mix", 1, 1, redAccent, "knob_red.png");
+    spaceModule->addKnob(bloomverb::params::IDs::distance, "Distance", 2, 0, juce::Colour(0xff9ba38a), "knob_irish_green.png");
     addAndMakeVisible(*spaceModule);
 
-    bloomModule = std::make_unique<ParameterModule>(apvts, "Bloom", 4, 1, stripCool);
-    bloomModule->addKnob(bloomverb::params::IDs::motion, "Motion", 0, 0, cyanAccent);
-    bloomModule->addKnob(bloomverb::params::IDs::texture, "Texture", 1, 0, mintAccent);
-    bloomModule->addKnob(bloomverb::params::IDs::swell, "Swell", 2, 0, juce::Colour(0xff7cb2cf));
-    bloomModule->addKnob(bloomverb::params::IDs::bloomAmount, "Bloom", 3, 0, redAccent);
+    bloomModule = std::make_unique<ParameterModule>(apvts, "Bloom", 4, 1, stripCool, usingFullUiSkin);
+    bloomModule->addKnob(bloomverb::params::IDs::motion, "Motion", 0, 0, cyanAccent, "knob_electric_blue.png");
+    bloomModule->addKnob(bloomverb::params::IDs::texture, "Texture", 1, 0, mintAccent, "knob_mint.png");
+    bloomModule->addKnob(bloomverb::params::IDs::swell, "Swell", 2, 0, juce::Colour(0xff7cb2cf), "knob_electric_blue.png");
+    bloomModule->addKnob(bloomverb::params::IDs::bloomAmount, "Bloom", 3, 0, redAccent, "knob_red.png");
     addAndMakeVisible(*bloomModule);
 
-    characterModule = std::make_unique<ParameterModule>(apvts, "Character", 3, 2, stripNeutral);
-    characterModule->addKnob(bloomverb::params::IDs::dynamic, "Dynamic", 0, 0, juce::Colour(0xff95bb9f));
-    characterModule->addKnob(bloomverb::params::IDs::harmonic, "Harmonic", 0, 1, juce::Colour(0xff8db4c0));
-    characterModule->addKnob(bloomverb::params::IDs::warp, "Warp", 1, 0, juce::Colour(0xffb88d78));
-    characterModule->addKnob(bloomverb::params::IDs::damping, "Damping", 1, 1, juce::Colour(0xff8aa38f));
-    characterModule->addKnob(bloomverb::params::IDs::width, "Width", 2, 0, cyanAccent);
-    characterModule->addKnob(bloomverb::params::IDs::early, "Early", 2, 1, juce::Colour(0xffb69872));
+    characterModule = std::make_unique<ParameterModule>(apvts, "Character", 3, 2, stripNeutral, usingFullUiSkin);
+    characterModule->addKnob(bloomverb::params::IDs::dynamic, "Dynamic", 0, 0, juce::Colour(0xff95bb9f), "knob_mint.png");
+    characterModule->addKnob(bloomverb::params::IDs::harmonic, "Harmonic", 0, 1, juce::Colour(0xff8db4c0), "knob_teal.png");
+    characterModule->addKnob(bloomverb::params::IDs::warp, "Warp", 1, 0, juce::Colour(0xffb88d78), "knob_orange.png");
+    characterModule->addKnob(bloomverb::params::IDs::damping, "Damping", 1, 1, juce::Colour(0xff8aa38f), "knob_mint.png");
+    characterModule->addKnob(bloomverb::params::IDs::width, "Width", 2, 0, cyanAccent, "knob_electric_blue.png");
+    characterModule->addKnob(bloomverb::params::IDs::early, "Early", 2, 1, juce::Colour(0xffb69872), "knob_brass.png");
     addAndMakeVisible(*characterModule);
 
-    sculptModule = std::make_unique<ParameterModule>(apvts, "Tone / Filters", 4, 1, stripCool);
-    sculptModule->addKnob(bloomverb::params::IDs::diffusion, "Diffusion", 0, 0, juce::Colour(0xff9ca3b8));
-    sculptModule->addKnob(bloomverb::params::IDs::tone, "Tone", 1, 0, juce::Colour(0xffc7b4a1));
-    sculptModule->addKnob(bloomverb::params::IDs::lowCutHz, "Low Cut", 2, 0, juce::Colour(0xff8ca3ac));
-    sculptModule->addKnob(bloomverb::params::IDs::highCutHz, "High Cut", 3, 0, juce::Colour(0xff95afbf));
+    sculptModule = std::make_unique<ParameterModule>(apvts, "Tone / Filters", 4, 1, stripCool, usingFullUiSkin);
+    sculptModule->addKnob(bloomverb::params::IDs::diffusion, "Diffusion", 0, 0, juce::Colour(0xff9ca3b8), "knob_grey.png");
+    sculptModule->addKnob(bloomverb::params::IDs::tone, "Tone", 1, 0, juce::Colour(0xffc7b4a1), "knob_bronze.png");
+    sculptModule->addKnob(bloomverb::params::IDs::lowCutHz, "Low Cut", 2, 0, juce::Colour(0xff8ca3ac), "knob_teal.png");
+    sculptModule->addKnob(bloomverb::params::IDs::highCutHz, "High Cut", 3, 0, juce::Colour(0xff95afbf), "knob_electric_blue.png");
     addAndMakeVisible(*sculptModule);
 
-    outputModule = std::make_unique<ParameterModule>(apvts, "Mod / Utility", 3, 2, stripWarm);
-    outputModule->addKnob(bloomverb::params::IDs::modRateHz, "Mod Rate", 0, 0, juce::Colour(0xff87aec0));
-    outputModule->addKnob(bloomverb::params::IDs::modDepth, "Mod Depth", 0, 1, juce::Colour(0xff75b5c6));
-    outputModule->addKnob(bloomverb::params::IDs::duckAmount, "Duck", 1, 0, juce::Colour(0xffb68a77));
-    outputModule->addKnob(bloomverb::params::IDs::transientPreserve, "Transient", 1, 1, juce::Colour(0xff8ab091));
+    outputModule = std::make_unique<ParameterModule>(apvts, "Mod / Utility", 3, 2, stripWarm, usingFullUiSkin);
+    outputModule->addKnob(bloomverb::params::IDs::modRateHz, "Mod Rate", 0, 0, juce::Colour(0xff87aec0), "knob_electric_blue.png");
+    outputModule->addKnob(bloomverb::params::IDs::modDepth, "Mod Depth", 0, 1, juce::Colour(0xff75b5c6), "knob_electric_blue.png");
+    outputModule->addKnob(bloomverb::params::IDs::duckAmount, "Duck", 1, 0, juce::Colour(0xffb68a77), "knob_orange.png");
+    outputModule->addKnob(bloomverb::params::IDs::transientPreserve, "Transient", 1, 1, juce::Colour(0xff8ab091), "knob_mint.png");
     outputModule->addToggle(bloomverb::params::IDs::freeze, "Freeze Hold", 2, 0);
     addAndMakeVisible(*outputModule);
 }
@@ -868,79 +1120,188 @@ void BloomVerbAudioProcessorEditor::refreshStandalonePlaybackState()
 
 void BloomVerbAudioProcessorEditor::paint(juce::Graphics& g)
 {
-    juce::ColourGradient background(chassisInner, 0.0f, 0.0f,
-                                    juce::Colour(0xff050608), 0.0f, static_cast<float>(getHeight()), false);
-    g.setGradientFill(background);
-    g.fillAll();
+#if JucePlugin_Build_Standalone
+    const int standaloneHeaderHeight = 44;
+    const auto uiBackgroundBounds = getLocalBounds().withTrimmedTop(standaloneHeaderHeight).toFloat();
+#else
+    const auto uiBackgroundBounds = getLocalBounds().toFloat();
+#endif
 
-    auto chassis = getLocalBounds().reduced(8).toFloat();
-    juce::ColourGradient chassisFill(chassisOuter.brighter(0.08f), chassis.getCentreX(), chassis.getY(),
-                                     chassisOuter.darker(0.25f), chassis.getCentreX(), chassis.getBottom(), false);
-    g.setGradientFill(chassisFill);
-    g.fillRoundedRectangle(chassis, 18.0f);
-    g.setColour(juce::Colour(0xff87725b));
-    g.drawRoundedRectangle(chassis, 18.0f, 1.4f);
-    drawScrews(g, chassis);
-
-    auto inner = chassis.reduced(16.0f, 16.0f);
-    auto topStrip = inner.removeFromTop(118.0f);
-    drawPlate(g, topStrip, juce::Colour(0xff211d18), 14.0f);
-
-    auto contentBed = inner.reduced(0.0f, 1.0f);
-    auto masterRail = contentBed.removeFromRight(332.0f);
-    drawPlate(g, masterRail, juce::Colour(0xff171513), 14.0f);
-    contentBed.removeFromRight(10.0f);
-
-    drawPlate(g, contentBed, juce::Colour(0xff14110f), 14.0f);
-
-    const int stripGap = 8;
-    const int stripCount = 5;
-    const float stripWidth = (contentBed.getWidth() - static_cast<float>(stripGap * (stripCount - 1)))
-                             / static_cast<float>(stripCount);
-    for (int i = 0; i < stripCount; ++i)
+    juce::Image fullUi = getFullUiSkin(assetLoader);
+    if (fullUi.isValid())
     {
-        const float x = contentBed.getX() + i * (stripWidth + static_cast<float>(stripGap));
-        auto stripArea = juce::Rectangle<float>(x, contentBed.getY(), stripWidth, contentBed.getHeight()).reduced(2.0f, 2.0f);
-        drawPlate(g, stripArea, (i % 2 == 0 ? juce::Colour(0xff15130f) : juce::Colour(0xff171619)), 11.0f);
+#if JucePlugin_Build_Standalone
+        g.drawImage(fullUi, uiBackgroundBounds, juce::RectanglePlacement::stretchToFit);
+        auto headerBar = getLocalBounds().removeFromTop(standaloneHeaderHeight).toFloat();
+        juce::ColourGradient headerGrad(chassisOuter.brighter(0.06f), headerBar.getCentreX(), headerBar.getY(),
+                                         chassisOuter.darker(0.2f), headerBar.getCentreX(), headerBar.getBottom(), false);
+        g.setGradientFill(headerGrad);
+        g.fillRect(headerBar);
+        g.setColour(juce::Colour(0x4487725b));
+        g.drawHorizontalLine(standaloneHeaderHeight - 1, 0.0f, static_cast<float>(getWidth()));
+#else
+        g.drawImage(fullUi, uiBackgroundBounds, juce::RectanglePlacement::stretchToFit);
+#endif
     }
+    else
+    {
+        juce::ColourGradient background(chassisInner, 0.0f, 0.0f,
+                                        juce::Colour(0xff050608), 0.0f, static_cast<float>(getHeight()), false);
+        g.setGradientFill(background);
+        g.fillAll();
 
-    auto faderWell = masterRail.reduced(10.0f, 10.0f).removeFromRight(82.0f);
-    drawPlate(g, faderWell, juce::Colour(0xff121417), 9.0f);
+#if JucePlugin_Build_Standalone
+        auto headerBar = getLocalBounds().removeFromTop(standaloneHeaderHeight).toFloat();
+        juce::ColourGradient headerGrad(chassisOuter.brighter(0.06f), headerBar.getCentreX(), headerBar.getY(),
+                                         chassisOuter.darker(0.2f), headerBar.getCentreX(), headerBar.getBottom(), false);
+        g.setGradientFill(headerGrad);
+        g.fillRect(headerBar);
+        g.setColour(juce::Colour(0x4487725b));
+        g.drawHorizontalLine(standaloneHeaderHeight - 1, 0.0f, static_cast<float>(getWidth()));
+#endif
+
+        auto chassis = getLocalBounds().reduced(8).toFloat();
+#if JucePlugin_Build_Standalone
+        chassis.removeFromTop(static_cast<float>(standaloneHeaderHeight));
+#endif
+        juce::ColourGradient chassisFill(chassisOuter.brighter(0.08f), chassis.getCentreX(), chassis.getY(),
+                                         chassisOuter.darker(0.25f), chassis.getCentreX(), chassis.getBottom(), false);
+        g.setGradientFill(chassisFill);
+        g.fillRoundedRectangle(chassis, 18.0f);
+        g.setColour(juce::Colour(0xff87725b));
+        g.drawRoundedRectangle(chassis, 18.0f, 1.4f);
+        drawScrews(g, chassis);
+
+        auto inner = chassis.reduced(16.0f, 16.0f);
+        auto topStrip = inner.removeFromTop(118.0f);
+        drawPlate(g, topStrip, juce::Colour(0xff211d18), 14.0f);
+
+        auto contentBed = inner.reduced(0.0f, 1.0f);
+        auto masterRail = contentBed.removeFromRight(332.0f);
+        drawPlate(g, masterRail, juce::Colour(0xff171513), 14.0f);
+        contentBed.removeFromRight(10.0f);
+
+        drawPlate(g, contentBed, juce::Colour(0xff14110f), 14.0f);
+
+        const int stripGap = 8;
+        const int stripCount = 5;
+        const float stripWidth = (contentBed.getWidth() - static_cast<float>(stripGap * (stripCount - 1)))
+                                 / static_cast<float>(stripCount);
+        for (int i = 0; i < stripCount; ++i)
+        {
+            const float x = contentBed.getX() + i * (stripWidth + static_cast<float>(stripGap));
+            auto stripArea = juce::Rectangle<float>(x, contentBed.getY(), stripWidth, contentBed.getHeight()).reduced(2.0f, 2.0f);
+            drawPlate(g, stripArea, (i % 2 == 0 ? juce::Colour(0xff15130f) : juce::Colour(0xff171619)), 11.0f);
+        }
+
+        auto faderWell = masterRail.reduced(10.0f, 10.0f).removeFromRight(82.0f);
+        drawPlate(g, faderWell, juce::Colour(0xff121417), 9.0f);
+    }
 }
 
 void BloomVerbAudioProcessorEditor::resized()
 {
-    auto area = getLocalBounds().reduced(22, 20);
-    auto header = area.removeFromTop(104);
-    auto titleRow = header.removeFromTop(38);
-
-    titleLabel.setBounds(titleRow.removeFromLeft(280));
-    statusLabel.setBounds(titleRow.removeFromRight(320));
-
-    auto infoRow = header.removeFromTop(22);
-    subtitleLabel.setBounds(infoRow.removeFromLeft(280));
-    typeLabel.setBounds(infoRow.removeFromLeft(34));
-    infoRow.removeFromLeft(6);
-    typeBox.setBounds(infoRow.removeFromLeft(192));
-
-    auto presetRow = header.removeFromTop(30);
-    presetLabel.setBounds(presetRow.removeFromLeft(42));
-    presetPrevButton.setBounds(presetRow.removeFromLeft(30));
-    presetRow.removeFromLeft(4);
-    presetBox.setBounds(presetRow.removeFromLeft(244));
-    presetRow.removeFromLeft(4);
-    presetNextButton.setBounds(presetRow.removeFromLeft(30));
-
+    auto contentArea = getLocalBounds();
+    const bool usingFullUiSkin = hasFullUiSkin(&assetLoader);
 #if JucePlugin_Build_Standalone
-    presetRow.removeFromLeft(12);
-    loadFileButton.setBounds(presetRow.removeFromLeft(64));
-    presetRow.removeFromLeft(4);
-    playFileButton.setBounds(presetRow.removeFromLeft(64));
-    presetRow.removeFromLeft(6);
-    loopFileToggle.setBounds(presetRow.removeFromLeft(94));
-    presetRow.removeFromLeft(10);
-    fileStatusLabel.setBounds(presetRow);
+    const int standaloneHeaderHeight = 44;
+    auto standaloneHeader = contentArea.removeFromTop(standaloneHeaderHeight);
+    auto buttonStrip = standaloneHeader;
+    loadFileButton.setBounds(buttonStrip.removeFromLeft(80).reduced(4, 8));
+    playFileButton.setBounds(buttonStrip.removeFromLeft(80).reduced(4, 8));
+    loopFileToggle.setBounds(buttonStrip.removeFromLeft(100).reduced(4, 8));
+    buttonStrip.removeFromLeft(12);
+
+    if (usingFullUiSkin)
+    {
+        auto rightControls = buttonStrip.removeFromRight(520);
+        statusLabel.setBounds(rightControls.removeFromRight(120).reduced(4, 8));
+        rightControls.removeFromRight(8);
+        presetNextButton.setBounds(rightControls.removeFromRight(30).reduced(2, 8));
+        presetBox.setBounds(rightControls.removeFromRight(244).reduced(4, 8));
+        presetPrevButton.setBounds(rightControls.removeFromRight(30).reduced(2, 8));
+        rightControls.removeFromRight(10);
+        typeBox.setBounds(rightControls.removeFromRight(192).reduced(4, 8));
+        fileStatusLabel.setBounds(buttonStrip.reduced(4, 8));
+    }
+    else
+    {
+        fileStatusLabel.setBounds(buttonStrip.reduced(4, 8));
+    }
 #endif
+
+    auto area = contentArea.reduced(22, 20);
+    auto header = area.removeFromTop(104);
+    if (usingFullUiSkin)
+    {
+        titleLabel.setBounds({});
+        subtitleLabel.setBounds({});
+        typeLabel.setBounds({});
+        presetLabel.setBounds({});
+#if !JucePlugin_Build_Standalone
+        statusLabel.setBounds({});
+        auto compactTopRow = header.removeFromTop(30);
+        typeBox.setBounds(compactTopRow.removeFromLeft(192));
+        compactTopRow.removeFromLeft(8);
+        presetPrevButton.setBounds(compactTopRow.removeFromLeft(30));
+        compactTopRow.removeFromLeft(4);
+        presetBox.setBounds(compactTopRow.removeFromLeft(244));
+        compactTopRow.removeFromLeft(4);
+        presetNextButton.setBounds(compactTopRow.removeFromLeft(30));
+#endif
+    }
+    else
+    {
+        auto titleRow = header.removeFromTop(38);
+
+        titleLabel.setBounds(titleRow.removeFromLeft(280));
+        statusLabel.setBounds(titleRow.removeFromRight(320));
+
+        auto infoRow = header.removeFromTop(22);
+        subtitleLabel.setBounds(infoRow.removeFromLeft(280));
+        typeLabel.setBounds(infoRow.removeFromLeft(34));
+        infoRow.removeFromLeft(6);
+        typeBox.setBounds(infoRow.removeFromLeft(192));
+
+        auto presetRow = header.removeFromTop(30);
+        presetLabel.setBounds(presetRow.removeFromLeft(42));
+        presetPrevButton.setBounds(presetRow.removeFromLeft(30));
+        presetRow.removeFromLeft(4);
+        presetBox.setBounds(presetRow.removeFromLeft(244));
+        presetRow.removeFromLeft(4);
+        presetNextButton.setBounds(presetRow.removeFromLeft(30));
+    }
+
+    if (usingFullUiSkin)
+    {
+        const auto specRect = [contentArea](int x, int y, int w, int h)
+        {
+            return juce::Rectangle<int>(contentArea.getX() + x,
+                                        contentArea.getY() + y,
+                                        w,
+                                        h);
+        };
+
+        if (spaceModule != nullptr)
+            spaceModule->setBounds(contentArea);
+        if (bloomModule != nullptr)
+            bloomModule->setBounds(contentArea);
+        if (characterModule != nullptr)
+            characterModule->setBounds(contentArea);
+        if (sculptModule != nullptr)
+            sculptModule->setBounds(contentArea);
+        if (outputModule != nullptr)
+            outputModule->setBounds(contentArea);
+
+        if (displayPanel != nullptr)
+            displayPanel->setBounds(specRect(1128, 124, 328, 250));
+        if (levelMeter != nullptr)
+            levelMeter->setBounds(specRect(1126, 382, 250, 458));
+
+        outputFaderLabel.setBounds(specRect(1384, 390, 66, 20));
+        outputFader.setBounds(specRect(1384, 414, 66, 418));
+        return;
+    }
 
     const int sectionGap = 10;
     auto masterRail = area.removeFromRight(332);

@@ -152,7 +152,7 @@ High-end analog console plugin UI, inspired by classic British large-format reco
 | `meter_slot_bg` | 98 x 314 | 196 x 628 | Reusable single meter slot |
 | `status_lamp_bezel` | 36 x 26 | 72 x 52 | Lamp housing only |
 | `fader_track_overlay` | 20 x 390 | 40 x 780 | Dark recessed fader slot |
-| `fader_thumb` | 46 x 16 | 92 x 32 | Output fader cap |
+| `fader_thumb` | 51 x 92 | 102 x 184 | Vertical output fader cap, intentionally wider than original spec |
 | `type_combo_bg` | 192 x 22 | 384 x 44 | Type selector shell |
 | `preset_combo_bg` | 244 x 30 | 488 x 60 | Preset selector shell |
 | `nav_button_off` | 30 x 30 | 60 x 60 | Header nav button |

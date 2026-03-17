@@ -1,26 +1,35 @@
 #include "BloomVerbEngine.h"
 #include "BloomVerbSmoothers.h"
 #include "BloomVerbTypeVoicing.h"
-#include "FDNCore.h"
+#include "CloudBloomDreamAlgorithm.h"
 #include "FreezeController.h"
+#include "GrainSpecialAlgorithm.h"
+#include "HallRoomAlgorithm.h"
+#include "PlateAlgorithm.h"
+#include "ReverbFamilyMapping.h"
 
 #include <cmath>
+#include <fstream>
 
 namespace
 {
 constexpr float twoPi = 6.28318530717958647692f;
 constexpr float minDecaySeconds = 0.10f;
-constexpr float maxDecaySeconds = 20.0f;
+constexpr float maxDecaySeconds = 30.0f;
 constexpr float decaySmoothTimeSeconds = 0.060f;
+constexpr float wetCalibrationGain = 32.0f;
 }
 
 namespace bloomverb
 {
 BloomVerbEngine::BloomVerbEngine()
-    : fdnCore(std::make_unique<FDNCore>()),
-      freezeController(std::make_unique<FreezeController>()),
+    : freezeController(std::make_unique<FreezeController>()),
       parameterSmoothers(std::make_unique<RuntimeParameterSmoothers>())
 {
+    algorithms[static_cast<size_t>(ReverbFamily::Plate)] = std::make_unique<PlateAlgorithm>();
+    algorithms[static_cast<size_t>(ReverbFamily::HallRoom)] = std::make_unique<HallRoomAlgorithm>();
+    algorithms[static_cast<size_t>(ReverbFamily::CloudBloomDream)] = std::make_unique<CloudBloomDreamAlgorithm>();
+    algorithms[static_cast<size_t>(ReverbFamily::GrainSpecial)] = std::make_unique<GrainSpecialAlgorithm>();
 }
 
 BloomVerbEngine::~BloomVerbEngine() = default;
@@ -61,7 +70,9 @@ void BloomVerbEngine::prepare(double sampleRate, int maxBlockSize, int numChanne
         filter.setType(juce::dsp::StateVariableTPTFilterType::lowpass);
     }
 
-    fdnCore->prepare(sampleRateHz);
+    for (auto& alg : algorithms)
+        if (alg)
+            alg->prepare(sampleRateHz);
     freezeController->prepare(sampleRateHz);
     parameterSmoothers->prepare(sampleRateHz);
     parameterSmoothers->reset(RuntimeParameters {});
@@ -104,7 +115,9 @@ void BloomVerbEngine::resetTypeDependentState()
     for (auto& filter : highCutFilters)
         filter.reset();
 
-    fdnCore->reset();
+    for (auto& alg : algorithms)
+        if (alg)
+            alg->reset();
     freezeController->reset();
 }
 
@@ -132,6 +145,9 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
     const auto numSamples = buffer.getNumSamples();
     const auto numChannels = juce::jmin(2, buffer.getNumChannels());
     if (numChannels < 1 || numSamples <= 0)
+        return;
+
+    if (delayBufferSize <= 0)
         return;
 
     if (numSamples > dryScratchBuffer.getNumSamples())
@@ -182,13 +198,13 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
         const float targetDecayTailControl = mapDecaySecondsToTailControl(smoothed.decaySeconds);
         decayTailControl += (targetDecayTailControl - decayTailControl) * decaySmoothCoeff;
         const float shapedDecayTail = std::pow(decayTailControl, 0.85f);
-        const float decayRoomBias = juce::jmap(shapedDecayTail, 0.0f, 1.0f, -0.08f, 0.20f);
-        const float decayDampingBias = juce::jmap(shapedDecayTail, 0.0f, 1.0f, 0.08f, -0.06f);
-        const float decayWetContour = juce::jmap(shapedDecayTail, 0.0f, 1.0f, 0.88f, 1.30f);
+        const float decayRoomBias = juce::jmap(shapedDecayTail, 0.0f, 1.0f, -0.12f, 0.35f);
+        const float decayDampingBias = juce::jmap(shapedDecayTail, 0.0f, 1.0f, 0.08f, -0.08f);
+        const float decayWetContour = juce::jmap(shapedDecayTail, 0.0f, 1.0f, 0.82f, 1.55f);
 
         const float modRate = juce::jlimit(0.01f, 8.0f, smoothed.modRateHz * profile.modRateScale);
         const float modDepth = juce::jlimit(0.0f, 1.0f, smoothed.modDepth)
-                             * juce::jlimit(0.0f, 1.0f, smoothed.motion) * 0.42f;
+                             * juce::jlimit(0.0f, 1.0f, smoothed.motion) * 0.62f;
         const float phaseIncrement = twoPi * modRate / static_cast<float>(sampleRateHz);
         const float motionTarget = std::sin(lfoPhase) * modDepth * profile.motionScale;
         motionState += (motionTarget - motionState) * motionSmoothCoeff;
@@ -196,13 +212,33 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
         if (lfoPhase >= twoPi)
             lfoPhase -= twoPi;
 
-        const float distanceBias = smoothed.distance * 0.45f;
+        const float distanceNorm = juce::jlimit(0.0f, 1.0f, smoothed.distance);
+        const float distanceBias = distanceNorm * 0.45f;
+        const float distanceDirectScale = juce::jmap(distanceNorm, 1.0f, 0.42f);
+        const float distanceWetLift = juce::jmap(distanceNorm, 1.0f, 1.75f);
+        const float distanceHighCutScale = juce::jmap(distanceNorm, 1.0f, 0.38f);
         const float transientPreserve = juce::jlimit(0.0f, 1.0f, smoothed.transientPreserve);
         const float transientOpen = juce::jlimit(0.0f, 1.0f, (fastEnvelope - slowEnvelope) * 8.0f + 0.2f);
         const float swellDelayScale = 1.0f + smoothed.swell * 0.30f + distanceBias;
         const int preDelaySamples = juce::jlimit(0, delayBufferSize - 1,
                                                  static_cast<int>((smoothed.preDelayMs * profile.preDelayScale
                                                                    * swellDelayScale * sampleRateHz) / 1000.0));
+        AlgorithmProcessContext algCtx;
+        algCtx.smoothed = &smoothed;
+        algCtx.typeDescriptor = &typeDescriptor;
+        algCtx.freezeState = &freezeState;
+        algCtx.decayTailControl = decayTailControl;
+        algCtx.decayRoomBias = decayRoomBias;
+        algCtx.decayDampingBias = decayDampingBias;
+        algCtx.decayWetContour = decayWetContour;
+        algCtx.distanceDirectScale = distanceDirectScale;
+        algCtx.distanceWetLift = distanceWetLift;
+        algCtx.distanceHighCutScale = distanceHighCutScale;
+        algCtx.swellDelayScale = swellDelayScale;
+        algCtx.preDelaySamples = preDelaySamples;
+        algCtx.motionState = motionState;
+        algCtx.releaseState = releaseState;
+        algCtx.lfoPhase = lfoPhase;
 
         const float earlyGain = juce::jlimit(0.0f, 1.0f,
                                              smoothed.early * profile.earlyScale * (1.0f + transientPreserve * 0.12f));
@@ -210,7 +246,7 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
                                                    smoothed.diffusion
                                                    + profile.textureBias * smoothed.texture
                                                    + profile.diffusionBias);
-        const float sampleAllpassA = juce::jlimit(0.0f, 0.88f, 0.10f + diffusionAmount * 0.72f + motionState * 0.12f);
+        const float sampleAllpassA = juce::jlimit(0.0f, 0.94f, 0.10f + diffusionAmount * 0.80f + motionState * 0.18f);
         const float earlyTapBias = juce::jlimit(-1.0f, 1.0f, profile.earlyTapWeightBias);
         const float tapAWeight = juce::jlimit(0.20f, 0.80f, 0.58f + earlyTapBias * 0.18f);
         const float tapBWeight = juce::jlimit(0.10f, 0.60f, 0.31f - earlyTapBias * 0.04f);
@@ -252,10 +288,11 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
                                                     0.32f + diffusionAmount * 0.42f
                                                         + smoothed.texture * 0.08f
                                                         + transientPreserve * 0.05f);
-            const float directLeak = juce::jlimit(0.03f, 0.22f,
-                                                  0.16f - diffusionAmount * 0.08f
-                                                      + smoothed.early * 0.04f
-                                                      - smoothed.swell * 0.04f);
+            const float directLeak = juce::jlimit(0.01f, 0.32f,
+                                                  (0.16f - diffusionAmount * 0.10f
+                                                      + smoothed.early * 0.06f
+                                                      - smoothed.swell * 0.04f)
+                                                  * distanceDirectScale);
             const float earlySeed = earlyRef * earlyGain;
             const float x = delayed * directLeak + earlySeed * (0.62f + handoffBlend * 0.42f);
             const float harmonicFeedAmount = juce::jlimit(0.0f, 1.0f,
@@ -284,38 +321,22 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
         preDelayWritePos = (preDelayWritePos + 1) % delayBufferSize;
         earlyDelayWritePos = (earlyDelayWritePos + 1) % delayBufferSize;
 
-        FDNSettings fdnSettings;
-        fdnSettings.size = juce::jlimit(0.0f, 1.0f, smoothed.size + profile.sizeBias + decayRoomBias);
-        fdnSettings.decaySeconds = smoothed.decaySeconds;
-        fdnSettings.damping = juce::jlimit(0.0f, 1.0f, smoothed.damping + profile.dampingBias + decayDampingBias);
-        fdnSettings.diffusion = diffusionAmount;
-        fdnSettings.width = juce::jlimit(0.0f, 2.0f,
-                                         smoothed.width * profile.widthScale
-                                             * (1.0f + releaseState * smoothed.dynamic * 0.20f * profile.widthGrowth));
-        fdnSettings.motion = juce::jlimit(0.0f, 1.0f, smoothed.motion * 0.60f + std::abs(motionState) * 0.10f);
-        fdnSettings.harmonic = juce::jlimit(0.0f, 1.0f, smoothed.harmonic * harmonicTypeScale);
-        fdnSettings.warp = juce::jlimit(0.0f, 1.0f, smoothed.warp * (1.0f + profile.warpTendency * 0.08f));
-        fdnSettings.texture = smoothed.texture;
-        fdnSettings.dynamic = smoothed.dynamic;
-        fdnSettings.releaseState = releaseState;
-        fdnSettings.roomScale = juce::jlimit(0.60f, 1.60f, profile.roomScale + decayRoomBias);
-        fdnSettings.freezeBlend = freezeState.blend;
-        fdnSettings.freezeFeedbackBoost = freezeState.feedbackBoost;
-        fdnSettings.freezeDampingScale = freezeState.dampingScale;
-        fdnSettings.constellation = &typeDescriptor.tank;
-
         float wetL = 0.0f;
         float wetR = 0.0f;
-        fdnCore->processSample(diffuseL, diffuseR, fdnSettings, wetL, wetR);
+        const auto family = getFamilyForType(smoothed.type);
+        auto* alg = algorithms[static_cast<size_t>(family)].get();
+        if (alg)
+            alg->processSample(diffuseL, diffuseR, algCtx, wetL, wetR);
 
-        wetL = juce::jmap(0.08f + diffusionAmount * 0.18f, wetL, wetL + diffuseL * 0.20f + harmonicRecircState[0] * 0.025f);
-        wetR = juce::jmap(0.08f + diffusionAmount * 0.18f, wetR, wetR + diffuseR * 0.20f + harmonicRecircState[1] * 0.025f);
+        wetL = juce::jmap(0.06f + diffusionAmount * 0.22f, wetL, wetL + diffuseL * 0.32f + harmonicRecircState[0] * 0.04f);
+        wetR = juce::jmap(0.06f + diffusionAmount * 0.22f, wetR, wetR + diffuseR * 0.32f + harmonicRecircState[1] * 0.04f);
 
         const float tone = juce::jlimit(-1.0f, 1.0f, smoothed.tone);
         const float lowCutHz = juce::jlimit(20.0f, 20000.0f,
                                             smoothed.lowCutHz * (1.0f - 0.12f * tone) * profile.lowCutScale);
         const float highCutHz = juce::jlimit(20.0f, 20000.0f,
-                                             smoothed.highCutHz * (1.0f + 0.10f * tone) * profile.highCutScale);
+                                             smoothed.highCutHz * (1.0f + 0.10f * tone)
+                                                 * profile.highCutScale * distanceHighCutScale);
         lowCutFilters[0].setCutoffFrequency(lowCutHz);
         lowCutFilters[1].setCutoffFrequency(lowCutHz);
         highCutFilters[0].setCutoffFrequency(highCutHz);
@@ -341,25 +362,101 @@ void BloomVerbEngine::process(juce::AudioBuffer<float>& buffer, const RuntimePar
         wetL = wetL * brightnessTilt + warpTailState[0] * densityAmount * 0.65f;
         wetR = wetR * brightnessTilt + warpTailState[1] * densityAmount * 0.65f;
 
-        const float bloom = juce::jlimit(0.0f, 1.0f, smoothed.bloomAmount * releaseState);
+        const float bloom = juce::jlimit(0.0f, 1.0f, smoothed.bloomAmount);
         const float duck = juce::jlimit(0.0f, 0.92f,
                                         fastEnvelope * smoothed.dynamic * smoothed.duckAmount
                                             * (1.4f - transientPreserve * 0.65f));
         const float transientBlend = juce::jlimit(0.0f, 1.0f, smoothed.transientPreserve * transientOpen);
         const float transientWetLift = 1.0f + transientBlend * 0.16f;
         const float tailWetContour = juce::jmax(decayWetContour, 1.0f - freezeState.blend * 0.15f);
-        const float warpGain = juce::jlimit(0.78f, 1.22f, 1.0f + warpAmount * warpTypeScale * (releaseState - 0.25f) * 0.16f);
-        const float wetGain = juce::jlimit(0.0f, 2.4f,
-                                           (1.0f - duck) * warpGain * (1.0f + bloom * 0.42f)
-                                               * tailWetContour * transientWetLift * profile.wetGainBias * 1.22f);
+        const float warpGain = juce::jlimit(0.72f, 1.38f, 1.0f + warpAmount * warpTypeScale * (releaseState - 0.25f) * 0.24f);
+        const float bloomWetScale = 1.0f + bloom * 1.5f;
+        const float wetGain = juce::jlimit(0.0f, 4.0f,
+                                           (1.0f - duck) * warpGain * bloomWetScale
+                                               * tailWetContour * transientWetLift * profile.wetGainBias
+                                               * 1.35f * distanceWetLift);
+
+        // #region agent log
+        if (sample == 0)
+        {
+            static bool firstBloomLog = true;
+            static float lastBloomAmount = -1.0f, lastReleaseState = -1.0f, lastBloom = -1.0f, lastWetGain = -1.0f;
+            static float lastMotion = -1.0f, lastModDepth = -1.0f, lastMotionState = -1.0f, lastModRateHz = -1.0f;
+            static float lastTexture = -1.0f, lastDiffusionAmount = -1.0f, lastTextureBias = -1.0f;
+            static float lastSwell = -1.0f, lastSwellDelayScale = -1.0f, lastSwellSuppression = -1.0f;
+            const float effectiveModDepth = juce::jlimit(0.0f, 1.0f, smoothed.modDepth)
+                                         * juce::jlimit(0.0f, 1.0f, smoothed.motion) * 0.62f;
+            const float swellSuppressionVal = smoothed.swell * transientOpen
+                * juce::jlimit(0.18f, 0.90f, 0.90f - transientPreserve * 0.65f);
+            const bool bloomChanged = firstBloomLog
+                || std::abs(smoothed.bloomAmount - lastBloomAmount) > 0.02f
+                || std::abs(releaseState - lastReleaseState) > 0.02f
+                || std::abs(bloom - lastBloom) > 0.02f
+                || std::abs(wetGain - lastWetGain) > 0.05f
+                || std::abs(smoothed.motion - lastMotion) > 0.02f
+                || std::abs(effectiveModDepth - lastModDepth) > 0.02f
+                || std::abs(motionState - lastMotionState) > 0.02f
+                || std::abs(smoothed.modRateHz - lastModRateHz) > 0.02f
+                || std::abs(smoothed.texture - lastTexture) > 0.02f
+                || std::abs(diffusionAmount - lastDiffusionAmount) > 0.02f
+                || std::abs(profile.textureBias - lastTextureBias) > 0.01f
+                || std::abs(smoothed.swell - lastSwell) > 0.02f
+                || std::abs(swellDelayScale - lastSwellDelayScale) > 0.02f
+                || std::abs(swellSuppressionVal - lastSwellSuppression) > 0.02f;
+            if (bloomChanged)
+            {
+                std::ofstream out(R"(C:\PROJECTS\A18\BloomVerb\BloomVerb\debug-f8da05.log)", std::ios::app);
+                if (out)
+                {
+                    const auto fmt = [](float v) { return juce::String(v, 4); };
+                    out << "{\"sessionId\":\"f8da05\",\"runId\":\"bloom-debug\",\"hypothesisId\":\"H1-H5\","
+                        << "\"location\":\"BloomVerbEngine.cpp:process\",\"message\":\"Bloom strip values\","
+                        << "\"data\":{"
+                        << "\"bloomAmount\":" << fmt(smoothed.bloomAmount)
+                        << ",\"releaseState\":" << fmt(releaseState)
+                        << ",\"bloom\":" << fmt(bloom)
+                        << ",\"bloomWetScale\":" << fmt(bloomWetScale)
+                        << ",\"wetGain\":" << fmt(wetGain)
+                        << ",\"motion\":" << fmt(smoothed.motion)
+                        << ",\"effectiveModDepth\":" << fmt(effectiveModDepth)
+                        << ",\"modRateHz\":" << fmt(smoothed.modRateHz)
+                        << ",\"motionState\":" << fmt(motionState)
+                        << ",\"texture\":" << fmt(smoothed.texture)
+                        << ",\"diffusionAmount\":" << fmt(diffusionAmount)
+                        << ",\"textureBias\":" << fmt(profile.textureBias)
+                        << ",\"swell\":" << fmt(smoothed.swell)
+                        << ",\"swellDelayScale\":" << fmt(swellDelayScale)
+                        << ",\"swellSuppression\":" << fmt(swellSuppressionVal)
+                        << ",\"mix\":" << fmt(smoothed.mix)
+                        << ",\"type\":" << smoothed.type
+                        << "},\"timestamp\":" << juce::Time::currentTimeMillis() << "}\n";
+                }
+                firstBloomLog = false;
+                lastBloomAmount = smoothed.bloomAmount;
+                lastReleaseState = releaseState;
+                lastBloom = bloom;
+                lastWetGain = wetGain;
+                lastMotion = smoothed.motion;
+                lastModDepth = effectiveModDepth;
+                lastMotionState = motionState;
+                lastModRateHz = smoothed.modRateHz;
+                lastTexture = smoothed.texture;
+                lastDiffusionAmount = diffusionAmount;
+                lastTextureBias = profile.textureBias;
+                lastSwell = smoothed.swell;
+                lastSwellDelayScale = swellDelayScale;
+                lastSwellSuppression = swellSuppressionVal;
+            }
+        }
+        // #endregion
         const float mix = juce::jlimit(0.0f, 1.0f, smoothed.mix);
         const float dryMix = std::sqrt(juce::jlimit(0.0f, 1.0f, 1.0f - mix));
         const float wetMix = std::sqrt(juce::jlimit(0.0f, 1.0f, mix + freezeState.blend * 0.05f));
-        const float highMixWetLift = juce::jmap(juce::jlimit(0.0f, 1.0f, (mix - 0.90f) / 0.10f), 1.0f, 1.60f);
+        const float highMixWetLift = juce::jmap(juce::jlimit(0.0f, 1.0f, (mix - 0.90f) / 0.10f), 1.0f, 2.0f);
         const float outputGain = juce::Decibels::decibelsToGain(smoothed.outputDb);
 
-        const float outL = (inL * dryMix + wetL * wetMix * wetGain * highMixWetLift) * outputGain;
-        const float outR = (inR * dryMix + wetR * wetMix * wetGain * highMixWetLift) * outputGain;
+        const float outL = (inL * dryMix + wetL * wetMix * wetGain * highMixWetLift * wetCalibrationGain) * outputGain;
+        const float outR = (inR * dryMix + wetR * wetMix * wetGain * highMixWetLift * wetCalibrationGain) * outputGain;
 
         buffer.setSample(0, sample, outL);
         if (numChannels > 1)

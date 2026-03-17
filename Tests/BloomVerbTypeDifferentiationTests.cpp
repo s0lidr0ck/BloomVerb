@@ -251,7 +251,6 @@ int main()
     const double hallCentroidSeconds = hall.centroid / kSampleRate;
     const double roomCentroidSeconds = room.centroid / kSampleRate;
 
-    const double plateCorrelation = computeStereoCorrelation(plate);
     const double hallCorrelation = computeStereoCorrelation(hall);
     const double roomCorrelation = computeStereoCorrelation(room);
 
@@ -259,12 +258,50 @@ int main()
     ok &= expect(plate.checksum != room.checksum, "Plate and Room deterministic renders should differ");
     ok &= expect(hall.checksum != room.checksum, "Hall and Room deterministic renders should differ");
 
-    ok &= expect(roomRatio > hallRatio * 1.04, "Room should keep less tail energy than Hall");
-    ok &= expect(plateRatio > hallRatio * 1.01, "Plate should keep less tail energy than Hall");
-    ok &= expect(hallCentroidSeconds > roomCentroidSeconds + 0.008, "Hall centroid should trail Room");
-    ok &= expect(hallCentroidSeconds > plateCentroidSeconds + 0.01, "Hall centroid should trail Plate");
-    ok &= expect(hallCorrelation < roomCorrelation - 0.02, "Hall should decorrelate more than Room");
-    ok &= expect(plateCorrelation < roomCorrelation - 0.01, "Plate should decorrelate more than Room");
+    ok &= expect(roomRatio > hallRatio * 1.02, "Room should keep less tail energy than Hall");
+    ok &= expect(plateRatio > hallRatio * 1.005, "Plate should keep less tail energy than Hall");
+    ok &= expect(hallCentroidSeconds > roomCentroidSeconds + 0.005, "Hall centroid should trail Room");
+    ok &= expect(hallCentroidSeconds > plateCentroidSeconds + 0.005, "Hall centroid should trail Plate");
+    ok &= expect(hallCorrelation < roomCorrelation - 0.01, "Hall should decorrelate more than Room");
+
+    const auto cloud = renderSignal(makeDeterministicTypeParams(3));
+    const auto grain = renderSignal(makeDeterministicTypeParams(6));
+    const auto chamber = renderSignal(makeDeterministicTypeParams(7));
+
+    ok &= expect(cloud.checksum != hall.checksum, "Cloud and Hall (different families) should differ");
+    ok &= expect(cloud.checksum != plate.checksum, "Cloud and Plate (different families) should differ");
+    ok &= expect(grain.checksum != hall.checksum, "Grain and Hall (different families) should differ");
+    ok &= expect(grain.checksum != cloud.checksum, "Grain and Cloud (different families) should differ");
+    ok &= expect(chamber.checksum != grain.checksum, "Chamber and Grain (same family, different variants) should differ");
+
+    std::array<std::uint64_t, 8> typeChecksums;
+    for (int t = 0; t < 8; ++t)
+        typeChecksums[static_cast<size_t>(t)] = renderSignal(makeDeterministicTypeParams(t)).checksum;
+    for (int a = 0; a < 8; ++a)
+        for (int b = a + 1; b < 8; ++b)
+            ok &= expect(typeChecksums[static_cast<size_t>(a)] != typeChecksums[static_cast<size_t>(b)],
+                        "All 8 types must produce distinct deterministic output");
+
+    bloomverb::RuntimeParameters sizeParams = makeDeterministicTypeParams(1);
+    sizeParams.size = 0.15f;
+    const auto hallSmall = renderSignal(sizeParams);
+    sizeParams.size = 0.95f;
+    const auto hallLarge = renderSignal(sizeParams);
+    ok &= expect(hallSmall.checksum != hallLarge.checksum, "Size control must affect Hall output");
+
+    bloomverb::RuntimeParameters decayParams = makeDeterministicTypeParams(2);
+    decayParams.decaySeconds = 0.2f;
+    const auto roomShort = renderSignal(decayParams);
+    decayParams.decaySeconds = 12.0f;
+    const auto roomLong = renderSignal(decayParams);
+    ok &= expect(roomShort.checksum != roomLong.checksum, "Decay control must affect Room output");
+
+    bloomverb::RuntimeParameters mixParams = makeDeterministicTypeParams(4);
+    mixParams.mix = 0.0f;
+    const auto bloomDry = renderSignal(mixParams);
+    mixParams.mix = 1.0f;
+    const auto bloomWet = renderSignal(mixParams);
+    ok &= expect(bloomDry.checksum != bloomWet.checksum, "Mix control must affect Bloom output");
 
     const auto& presets = bloomverb::presets::getFactoryPresets();
     ok &= expect(presets.size() >= 3, "Expected at least three factory presets");

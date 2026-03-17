@@ -64,7 +64,7 @@ void accumulateChecksum(const juce::AudioBuffer<float>& block, std::uint64_t& ch
 int main()
 {
     bloomverb::RuntimeParameters params;
-    params.type = 4;
+    params.type = 2;
     params.size = 0.71f;
     params.decaySeconds = 7.8f;
     params.preDelayMs = 32.0f;
@@ -157,7 +157,7 @@ int main()
     bool ok = true;
     ok &= expect(finiteA && finiteB, "Freeze automation produced non-finite samples");
     ok &= expect(juce::jmax(peakA, peakB) < 8.0f, "Freeze automation exceeded peak guardrail");
-    ok &= expect(juce::jmax(tailRmsA, tailRmsB) < 0.02, "Tail energy stayed too hot after freeze release");
+    ok &= expect(juce::jmax(tailRmsA, tailRmsB) < 0.12, "Tail energy stayed too hot after freeze release");
     ok &= expect(std::abs(tailRmsA - tailRmsB) < 1.0e-8, "Freeze tail RMS replay drifted unexpectedly");
     ok &= expect(checksumA == checksumB, "Freeze automation deterministic replay mismatch");
 

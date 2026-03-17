@@ -2,6 +2,7 @@
 #include "PluginEditor.h"
 
 #include <cmath>
+#include <fstream>
 
 namespace
 {
@@ -54,8 +55,50 @@ int findPresetIndexFromState(const juce::ValueTree& state,
     if (presetIndex >= 0 && presetIndex < static_cast<int>(presets.size()))
         return presetIndex;
 
-    return 0;
+    return -1;
 }
+
+bool hasExplicitPresetSelection(const juce::ValueTree& state)
+{
+    return state.hasProperty(kSelectedPresetIdProperty)
+        || state.hasProperty(kSelectedPresetNameProperty)
+        || state.hasProperty(kSelectedPresetIndexProperty);
+}
+
+bool stateMatchesPreset(const juce::AudioProcessorValueTreeState& apvts,
+                        const bloomverb::presets::BloomVerbPreset& preset,
+                        float tolerance = 0.0015f)
+{
+    for (const auto& [parameterId, expectedValue] : preset.parameterValuesById)
+    {
+        const auto actualValue = bloomverb::params::getValue(apvts, juce::StringRef(parameterId.c_str()));
+        if (std::abs(actualValue - expectedValue) > tolerance)
+            return false;
+    }
+
+    return true;
+}
+
+// #region agent log
+void appendDebugLog(const char* location,
+                    const char* message,
+                    const juce::String& dataJson,
+                    const char* hypothesisId,
+                    const char* runId = "space-debug-pre")
+{
+    std::ofstream out(R"(C:\PROJECTS\A18\BloomVerb\BloomVerb\debug-f8da05.log)", std::ios::app);
+    if (!out)
+        return;
+
+    out << "{\"sessionId\":\"f8da05\",\"runId\":\"" << runId
+        << "\",\"hypothesisId\":\"" << hypothesisId
+        << "\",\"location\":\"" << location
+        << "\",\"message\":\"" << message
+        << "\",\"data\":" << dataJson
+        << ",\"timestamp\":" << juce::Time::currentTimeMillis()
+        << "}\n";
+}
+// #endregion
 }
 
 BloomVerbAudioProcessor::BloomVerbAudioProcessor()
@@ -156,6 +199,47 @@ void BloomVerbAudioProcessor::processBlock(juce::AudioBuffer<float>& buffer, juc
     const auto meterChannels = juce::jmax(1, juce::jmin(2, totalOutputChannels));
     updateMeterValue(inputMeterLevel, computePeakLevel(buffer, meterChannels));
     freezeVisualAmount.store(runtimeParameters.freeze ? 1.0f : 0.0f);
+
+    {
+        static bool firstLog = true;
+        static float lastSize = -1.0f;
+        static float lastDecay = -1.0f;
+        static float lastPreDelay = -1.0f;
+        static float lastDistance = -1.0f;
+        static float lastMix = -1.0f;
+
+        const bool changed = firstLog
+            || std::abs(runtimeParameters.size - lastSize) > 0.02f
+            || std::abs(runtimeParameters.decaySeconds - lastDecay) > 0.10f
+            || std::abs(runtimeParameters.preDelayMs - lastPreDelay) > 2.0f
+            || std::abs(runtimeParameters.distance - lastDistance) > 0.02f
+            || std::abs(runtimeParameters.mix - lastMix) > 0.02f;
+
+        if (changed)
+        {
+            // #region agent log
+            appendDebugLog("PluginProcessor.cpp:processBlock",
+                           "Runtime Space parameters",
+                           "{"
+                           "\"type\":" + juce::String(runtimeParameters.type)
+                           + ",\"size\":" + juce::String(runtimeParameters.size, 3)
+                           + ",\"decaySeconds\":" + juce::String(runtimeParameters.decaySeconds, 3)
+                           + ",\"preDelayMs\":" + juce::String(runtimeParameters.preDelayMs, 3)
+                           + ",\"distance\":" + juce::String(runtimeParameters.distance, 3)
+                           + ",\"mix\":" + juce::String(runtimeParameters.mix, 3)
+                           + ",\"outputDb\":" + juce::String(runtimeParameters.outputDb, 3)
+                           + "}",
+                           "H1");
+            // #endregion
+
+            firstLog = false;
+            lastSize = runtimeParameters.size;
+            lastDecay = runtimeParameters.decaySeconds;
+            lastPreDelay = runtimeParameters.preDelayMs;
+            lastDistance = runtimeParameters.distance;
+            lastMix = runtimeParameters.mix;
+        }
+    }
 
     engine.process(buffer, runtimeParameters);
     updateMeterValue(outputMeterLevel, computePeakLevel(buffer, juce::jmin(2, totalOutputChannels)));
@@ -282,7 +366,18 @@ void BloomVerbAudioProcessor::setStateInformation(const void* data, int sizeInBy
         {
             auto restoredState = juce::ValueTree::fromXml(*xml);
             apvts.replaceState(restoredState);
-            currentPresetIndex.store(findPresetIndexFromState(restoredState, bloomverb::presets::getFactoryPresets()));
+            const auto& presets = bloomverb::presets::getFactoryPresets();
+            const bool explicitPresetSelection = hasExplicitPresetSelection(restoredState);
+            const int resolvedPresetIndex = explicitPresetSelection
+                ? findPresetIndexFromState(restoredState, presets)
+                : -1;
+            currentPresetIndex.store(resolvedPresetIndex);
+
+            if (resolvedPresetIndex >= 0 && resolvedPresetIndex < static_cast<int>(presets.size())
+                && !stateMatchesPreset(apvts, presets[static_cast<size_t>(resolvedPresetIndex)]))
+            {
+                applyPresetInternal(presets[static_cast<size_t>(resolvedPresetIndex)]);
+            }
         }
     }
 }

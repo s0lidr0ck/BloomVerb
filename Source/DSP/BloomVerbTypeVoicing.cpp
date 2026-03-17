@@ -107,4 +107,18 @@ const TankConstellation& getTankConstellation(int type) noexcept
 {
     return getTypeDescriptor(type).tank;
 }
+
+const TypeDescriptor& getDescriptorForFamilyVariant(ReverbFamily family, int variant) noexcept
+{
+    constexpr int kTypeByFamilyVariant[4][3] = {
+        { 0, -1, -1 },       // Plate: 0
+        { 1, 2, -1 },        // HallRoom: Hall, Room
+        { 3, 4, 5 },         // CloudBloomDream: Cloud, Bloom, Dream
+        { 6, 7, -1 }         // GrainSpecial: Grain, Chamber
+    };
+    const int type = (variant >= 0 && variant < 3 && kTypeByFamilyVariant[static_cast<int>(family)][variant] >= 0)
+        ? kTypeByFamilyVariant[static_cast<int>(family)][variant]
+        : 1;
+    return getTypeDescriptor(type);
+}
 } // namespace bloomverb

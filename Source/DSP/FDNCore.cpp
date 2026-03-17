@@ -5,6 +5,8 @@
 namespace
 {
 constexpr float kTwoPi = 6.28318530717958647692f;
+constexpr float kMinDecaySeconds = 0.10f;
+constexpr float kMaxDecaySeconds = 30.0f;
 
 float saturateSample(float x, float amount)
 {
@@ -15,6 +17,15 @@ float saturateSample(float x, float amount)
     const float normaliser = std::tanh(drive);
     return std::tanh(x * drive) / juce::jmax(0.0001f, normaliser);
 }
+
+float mapDecaySecondsToFeedback(float decaySeconds, float freezeFeedbackBoost)
+{
+    const float clampedSeconds = juce::jlimit(kMinDecaySeconds, kMaxDecaySeconds, decaySeconds);
+    const float decayNorm = std::log(clampedSeconds / kMinDecaySeconds) / std::log(kMaxDecaySeconds / kMinDecaySeconds);
+    return juce::jlimit(0.28f, 0.995f,
+                        0.28f + decayNorm * 0.68f + freezeFeedbackBoost);
+}
+
 } // namespace
 
 namespace bloomverb
@@ -22,7 +33,7 @@ namespace bloomverb
 void FDNCore::prepare(double sampleRate)
 {
     sampleRateHz = juce::jmax(1.0, sampleRate);
-    maxDelaySamples = static_cast<int>(std::ceil(sampleRateHz * 0.40));
+    maxDelaySamples = static_cast<int>(std::ceil(sampleRateHz * 0.55));
     maxDelaySamples = juce::jmax(maxDelaySamples, 64);
 
     for (auto& line : delayLines)
@@ -53,10 +64,8 @@ void FDNCore::processSample(float inputLeft,
     const auto& constellation = settings.constellation != nullptr
         ? *settings.constellation
         : bloomverb::getTankConstellation(1);
-    const float sizeScale = juce::jlimit(0.48f, 1.75f, 0.60f + settings.size * settings.roomScale * 1.05f);
-    const float decayNorm = juce::jlimit(0.0f, 1.0f, (settings.decaySeconds - 0.10f) / (20.0f - 0.10f));
-    const float feedback = juce::jlimit(0.45f, 0.995f,
-                                        0.36f + decayNorm * 0.56f + settings.freezeFeedbackBoost);
+    const float sizeScale = juce::jlimit(0.42f, 2.15f, 0.55f + settings.size * settings.roomScale * 1.25f);
+    const float feedback = mapDecaySecondsToFeedback(settings.decaySeconds, settings.freezeFeedbackBoost);
     const float dampingCoeff = juce::jlimit(0.01f, 0.24f,
                                             (0.02f + (1.0f - settings.damping) * 0.18f) * settings.freezeDampingScale);
     const float motionDepth = juce::jlimit(0.0f, 1.0f, settings.motion) * 0.010f;
@@ -121,7 +130,7 @@ void FDNCore::processSample(float inputLeft,
         tankRight += lineValues[i] * constellation.outputWeightsRight[i];
     }
 
-    const float width = juce::jlimit(0.0f, 2.0f, settings.width * (0.80f + settings.dynamic * 0.20f));
+    const float width = juce::jlimit(0.0f, 2.5f, settings.width * (0.85f + settings.dynamic * 0.28f));
     const float baseLeft = tankLeft * 0.48f;
     const float baseRight = tankRight * 0.48f;
     const float mid = 0.5f * (baseLeft + baseRight);

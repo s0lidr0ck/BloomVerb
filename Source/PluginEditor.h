@@ -3,6 +3,7 @@
 #include <juce_audio_processors/juce_audio_processors.h>
 #include <juce_gui_extra/juce_gui_extra.h>
 
+#include "AssetLoader.h"
 #include "PluginProcessor.h"
 
 class BloomVerbAudioProcessorEditor final : public juce::AudioProcessorEditor,
@@ -29,6 +30,7 @@ private:
 
     BloomVerbAudioProcessor& processor;
     juce::AudioProcessorValueTreeState& apvts;
+    AssetLoader assetLoader;
     std::unique_ptr<ProductionLookAndFeel> lookAndFeel;
 
     juce::Label titleLabel;

@@ -105,12 +105,12 @@ Lamp housing for status indicator.
 High-end analog console plugin UI, British large-format console, front-facing orthographic, dark graphite, champagne trim, patina, greenscreen (#00FF00). Asset role: small circular or rectangular lamp bezel/housing. Composition: single lamp housing, recessed for LED. Must include: metallic bezel, recessed well for light. Keep empty: center where JUCE draws status color. Do not include: lit LED, text. Exact canvas: 72 x 52. Greenscreen background.
 ```
 
-### fader_thumb (46×16 → 92×32)
+### fader_thumb (51×92 → 102×184)
 
 Output fader cap/slider.
 
 ```
-High-end analog console plugin UI, British large-format console, front-facing orthographic, dark graphite, champagne trim, patina, greenscreen (#00FF00). Asset role: fader cap/slider thumb for output level. Composition: single horizontal rectangular cap, slightly domed. Must include: metallic cap, grip texture or ridges. Do not include: track, scale. Material emphasis: dark metallic or champagne cap. Exact canvas: 92 x 32. Greenscreen background.
+High-end analog console plugin UI, British large-format console, front-facing orthographic, dark graphite, champagne trim, patina, greenscreen (#00FF00). Asset role: vertical fader cap/slider thumb for output level. Composition: single tall rectangular fader handle with softened corners, slightly domed face, horizontal grip ridges across the upper and lower sections, and a central accent bar. Must include: metallic cap, tactile grip texture, believable hardware depth. Do not include: track, scale, numbers. Material emphasis: dark metallic, champagne, cream, or red cap variants; preferred integrated look is the wider champagne/metal version. Exact canvas: 102 x 184. Greenscreen background.
 ```
 
 ---
